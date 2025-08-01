@@ -1,25 +1,18 @@
 #include "uiLogin.h"
 
-#include <wx/string.h>
+#include "uiMainFrame.h"
 
-CMainFrame::CMainFrame(const wxString& title) : wxFrame(nullptr, wxID_ANY, title) {
-    m_panel = new wxPanel(this, wxID_ANY);
+CLoginWindow::CLoginWindow() : wxPanel(g_mainFrame, wxID_ANY) {
     auto* mainSizer = new wxBoxSizer(wxVERTICAL);
     auto* textSizer = new wxBoxSizer(wxVERTICAL);
     auto* optionSizer = new wxBoxSizer(wxHORIZONTAL);
-    auto* description =
-        new wxTextCtrl(m_panel, wxID_ANY, "Log in to Telegram by QR Code or phone number", wxDefaultPosition,
-                       wxDefaultSize, wxTE_READONLY | wxTC_MULTILINE, wxDefaultValidator);
-    m_login = new wxButton(m_panel, wxID_ANY, "Log in by phone number", wxDefaultPosition, wxDefaultSize, 0);
-    textSizer->Add(description);
+    auto* text = new wxTextCtrl(this, wxID_ANY, "Log in to Telegram by phone number or QR Code", wxDefaultPosition,
+                                wxDefaultSize, wxTE_READONLY | wxTE_MULTILINE);
+    m_login = new wxButton(this, wxID_ANY, "Log in by phone number");
+    textSizer->Add(text);
     optionSizer->Add(m_login);
     mainSizer->Add(textSizer);
     mainSizer->Add(optionSizer);
-    m_panel->SetSizer(mainSizer);
-}
-
-bool CMgramEntry::OnInit() {
-    auto* frame = new CMainFrame("MGram");
-    frame->Show(true);
-    return true;
+    this->SetSizer(mainSizer);
+    text->SetFocus();
 }

@@ -2,17 +2,12 @@
 #define UI_LOGIN_H
 #include <wx/wx.h>
 
-class CMainFrame : public wxFrame {
+class CLoginWindow : public wxPanel {
   public:
-    CMainFrame(const wxString& title);
+    CLoginWindow();
 
   private:
-    wxPanel* m_panel;
     wxButton* m_login;
 };
 
-class CMgramEntry : public wxApp {
-  public:
-    virtual bool OnInit() override;
-};
 #endif
