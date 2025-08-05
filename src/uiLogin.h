@@ -6,8 +6,11 @@ class CLoginWindow : public wxPanel {
   public:
     CLoginWindow();
 
+    void OnLoginPressed(wxCommandEvent& event);
+
   private:
     wxButton* m_login;
+    wxCheckBox* m_useTestDataCenter;
 };
 
 #endif
