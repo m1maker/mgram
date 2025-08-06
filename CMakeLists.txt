@@ -16,6 +16,8 @@ project ("MGram" VERSION 0.1)
 
 file(GLOB MGRAM_SOURCES "src/*.cpp")
 
+include(user/APIInfo.cmake)
+
 add_executable(${PROJECT_NAME} ${MGRAM_SOURCES})
 
 
@@ -26,6 +28,8 @@ endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
   wxMSVC_VERSION_ABI_COMPAT # Important for wxWidgets v3.3.0+
+TDAPI_ID=${TELEGRAM_API_ID}
+TDAPI_HASH={TELEGRAM_API_HASH}
 )
 
 # --- Dependencies with FetchContent ---

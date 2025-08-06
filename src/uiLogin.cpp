@@ -1,4 +1,5 @@
 #include "uiLogin.h"
+#include "constants.h"
 
 #include "uiLoginPhone.h"
 #include "uiMainFrame.h"
@@ -30,8 +31,8 @@ void CLoginWindow::OnLoginPressed(wxCommandEvent& event) {
     bool useTestDataCenter = m_useTestDataCenter->IsChecked();
 
     auto set_params = td::td_api::make_object<td::td_api::setTdlibParameters>();
-    set_params->api_id_ = 12345;
-    set_params->api_hash_ = "";
+    set_params->api_id_ = API_ID;
+    set_params->api_hash_ = API_HASH;
     set_params->database_directory_ = "tdlib";
     set_params->use_test_dc_ = useTestDataCenter;
     set_params->device_model_ = "Desktop";
