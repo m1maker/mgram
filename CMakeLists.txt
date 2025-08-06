@@ -29,7 +29,7 @@ endif()
 target_compile_definitions(${PROJECT_NAME} PRIVATE
   wxMSVC_VERSION_ABI_COMPAT # Important for wxWidgets v3.3.0+
 TDAPI_ID=${TELEGRAM_API_ID}
-TDAPI_HASH={TELEGRAM_API_HASH}
+TDAPI_HASH="${TELEGRAM_API_HASH}"
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE dep)

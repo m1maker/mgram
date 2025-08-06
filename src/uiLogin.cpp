@@ -1,6 +1,6 @@
 #include "uiLogin.h"
-#include "constants.h"
 
+#include "constants.h"
 #include "uiLoginPhone.h"
 #include "uiMainFrame.h"
 
