@@ -32,6 +32,9 @@ TDAPI_ID=${TELEGRAM_API_ID}
 TDAPI_HASH={TELEGRAM_API_HASH}
 )
 
+target_include_directories(${PROJECT_NAME} PRIVATE dep)
+
+
 # --- Dependencies with FetchContent ---
 include(FetchContent)
 set(FETCHCONTENT_BASE_DIR ${CMAKE_BINARY_DIR}/_dependencies)

@@ -13,7 +13,8 @@
 #endif
 
 #include <string>
+#include <obfuscate.h>
 
 inline constexpr unsigned long long API_ID = TDAPI_ID;
-inline constexpr std::string API_HASH = STRINGIFY(TDAPI_HASH);
+inline auto& API_HASH = AY_OBFUSCATE(STRINGIFY(TDAPI_HASH));
 #endif
