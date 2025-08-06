@@ -2,27 +2,45 @@
 
 #include "uiMainFrame.h"
 
-CLoginPhoneWindow::CLoginPhoneWindow(bool useTestDataCenter) : wxPanel(g_mainFrame, wxID_ANY) {
+#include <td/telegram/td_api.h>
+
+CLoginPhoneWindow::CLoginPhoneWindow(wxSimplebook* book) : wxPanel(book, wxID_ANY), m_book(book) {
     auto* mainSizer = new wxBoxSizer(wxVERTICAL);
-    auto* textSizer = new wxBoxSizer(wxVERTICAL);
-    auto* optionSizer = new wxBoxSizer(wxHORIZONTAL);
-    auto* phoneNumberLable = new wxStaticText(this, wxID_ANY, "Phone Number");
+    auto* phoneNumberLabel = new wxStaticText(this, wxID_ANY, "Phone Number");
     m_phoneNumber = new wxTextCtrl(this, wxID_ANY, "+", wxDefaultPosition, wxDefaultSize, wxTE_PROCESS_ENTER);
     m_next = new wxButton(this, wxID_ANY, "&Next");
     m_cancel = new wxButton(this, wxID_ANY, "&Cancel");
 
-    textSizer->Add(phoneNumberLable);
-    textSizer->Add(m_phoneNumber);
-    optionSizer->Add(m_next);
-    optionSizer->Add(m_cancel);
-    mainSizer->Add(textSizer);
-    mainSizer->Add(optionSizer);
-    this->SetSizer(mainSizer);
+    mainSizer->Add(phoneNumberLabel, 0, wxALL, 5);
+    mainSizer->Add(m_phoneNumber, 0, wxEXPAND | wxALL, 5);
+
+    auto* buttonSizer = new wxBoxSizer(wxHORIZONTAL);
+    buttonSizer->Add(m_next, 0, wxALL, 5);
+    buttonSizer->Add(m_cancel, 0, wxALL, 5);
+
+    mainSizer->Add(buttonSizer, 0, wxALIGN_CENTER | wxTOP, 10);
+
+    SetSizerAndFit(mainSizer);
+
+    m_next->Bind(wxEVT_BUTTON, &CLoginPhoneWindow::OnNextPressed, this);
     m_cancel->Bind(wxEVT_BUTTON, &CLoginPhoneWindow::OnCancelPressed, this);
     m_phoneNumber->SetFocus();
 }
 
+extern CMainFrame* g_mainFrame;
+
+void CLoginPhoneWindow::OnNextPressed(wxCommandEvent& event) {
+    wxString phoneNumber = m_phoneNumber->GetValue();
+
+    auto set_phone_number = td::td_api::make_object<td::td_api::setAuthenticationPhoneNumber>();
+    set_phone_number->phone_number_ = phoneNumber.ToStdString();
+
+    g_mainFrame->getTdManager()->send(std::move(set_phone_number),
+                                      [](td::td_api::object_ptr<td::td_api::Object> object) {});
+}
+
 void CLoginPhoneWindow::OnCancelPressed(wxCommandEvent& event) {
-    this->Destroy();
-    auto* loginWindow = new CLoginWindow();
+    if (m_book->FindPage(g_mainFrame->m_loginWindow) != wxNOT_FOUND) {
+        m_book->SetSelection(m_book->FindPage(g_mainFrame->m_loginWindow));
+    }
 }
