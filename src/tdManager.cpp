@@ -1,8 +1,8 @@
 #include "tdManager.h"
+
 #include <atomic>
 
-TdManager::TdManager()
-    : client_manager_(std::make_unique<td::ClientManager>()), running_(true) {
+TdManager::TdManager() : client_manager_(std::make_unique<td::ClientManager>()), running_(true) {
     client_id_ = client_manager_->create_client_id();
     worker_thread_ = std::thread(&TdManager::run, this);
 }

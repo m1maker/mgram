@@ -38,9 +38,9 @@ CLoginPhoneWindow::CLoginPhoneWindow(wxSimplebook* book, TdManager& manager)
     manager.setUpdateCallback([this](td::td_api::object_ptr<td::td_api::Object> update) {
         if (update->get_id() == td::td_api::updateAuthorizationState::ID) {
             auto auth_state = td::td_api::move_object_as<td::td_api::updateAuthorizationState>(update);
-            
+
             auto* event = new wxCommandEvent(wxEVT_TDLIB_UPDATE);
-            event->SetClientData(auth_state.release()); 
+            event->SetClientData(auth_state.release());
             wxQueueEvent(this, event);
         }
     });
