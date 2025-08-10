@@ -7,6 +7,8 @@
 #include <td/telegram/td_api.hpp>
 #include <wx/msgdlg.h>
 
+wxDEFINE_EVENT(wxEVT_TDLIB_UPDATE, wxCommandEvent);
+
 extern CMainFrame* g_mainFrame;
 
 CLoginPhoneWindow::CLoginPhoneWindow(wxSimplebook* book, TdManager& manager)
@@ -32,29 +34,36 @@ CLoginPhoneWindow::CLoginPhoneWindow(wxSimplebook* book, TdManager& manager)
     m_cancel->Bind(wxEVT_BUTTON, &CLoginPhoneWindow::OnCancelPressed, this);
     m_entry->Bind(wxEVT_TEXT_ENTER, &CLoginPhoneWindow::OnNextPressed, this);
 
+    Bind(wxEVT_TDLIB_UPDATE, &CLoginPhoneWindow::OnTdlibUpdate, this);
+
     manager.setUpdateCallback([this](td::td_api::object_ptr<td::td_api::Object> update) {
         if (update->get_id() == td::td_api::updateAuthorizationState::ID) {
             auto auth_state = td::td_api::move_object_as<td::td_api::updateAuthorizationState>(update);
             auto state_id = auth_state->authorization_state_->get_id();
 
-            CallAfter([this, state_id]() {
-                if (state_id == td::td_api::authorizationStateWaitCode::ID) {
-                    SwitchLoginState(LOGIN_CODE);
-                } else if (state_id == td::td_api::authorizationStateWaitPassword::ID) {
-                    SwitchLoginState(LOGIN_PASSWORD);
-                } else if (state_id == td::td_api::authorizationStateReady::ID) {
-                    m_book->SetSelection(m_book->FindPage(g_mainFrame->m_mainWindow));
-                } else if (state_id == td::td_api::authorizationStateClosed::ID) {
-                    wxMessageBox("Authentication failed or was terminated. Please try again.", "Login Error",
-                                 wxOK | wxICON_ERROR);
-                    wxCommandEvent evt;
-                    OnCancelPressed(evt);
-                }
-            });
+            wxCommandEvent* event = new wxCommandEvent(wxEVT_TDLIB_UPDATE);
+            event->SetInt(state_id);
+            wxQueueEvent(this, event);
         }
     });
 
     SwitchLoginState(m_loginState);
+}
+
+void CLoginPhoneWindow::OnTdlibUpdate(wxCommandEvent& event) {
+    auto state_id = event.GetInt();
+
+    if (state_id == td::td_api::authorizationStateWaitCode::ID) {
+        SwitchLoginState(LOGIN_CODE);
+    } else if (state_id == td::td_api::authorizationStateWaitPassword::ID) {
+        SwitchLoginState(LOGIN_PASSWORD);
+    } else if (state_id == td::td_api::authorizationStateReady::ID) {
+        m_book->SetSelection(m_book->FindPage(g_mainFrame->m_mainWindow));
+    } else if (state_id == td::td_api::authorizationStateClosed::ID) {
+        wxMessageBox("Authentication failed or was terminated. Please try again.", "Login Error", wxOK | wxICON_ERROR);
+        wxCommandEvent evt;
+        OnCancelPressed(evt);
+    }
 }
 
 void CLoginPhoneWindow::SwitchLoginState(const ELoginState& newState) {
@@ -80,6 +89,7 @@ void CLoginPhoneWindow::SwitchLoginState(const ELoginState& newState) {
             break;
     }
 
+    m_entry->Enable();
     m_next->Enable();
     m_entry->SetFocus();
     Layout();
@@ -94,19 +104,26 @@ void CLoginPhoneWindow::OnNextPressed(wxCommandEvent& event) {
     }
 
     m_next->Disable();
+    m_entry->Disable();
 
     auto response_handler = [this](td::td_api::object_ptr<td::td_api::Object> object) {
-        if (object->get_id() == td::td_api::error::ID) {
-            auto error = td::td_api::move_object_as<td::td_api::error>(object);
-            wxString error_message = wxString::Format("Error: %s (Code: %d)", error->message_, error->code_);
+        td::td_api::Object* raw_object = object.release();
 
-            CallAfter([this, error_message]() {
+        CallAfter([this, raw_object]() {
+            td::td_api::object_ptr<td::td_api::Object> object(raw_object);
+
+            m_next->Enable();
+            m_entry->Enable();
+            m_entry->SetFocus();
+
+            if (object->get_id() == td::td_api::error::ID) {
+                auto error = td::td_api::move_object_as<td::td_api::error>(std::move(object));
+                wxString error_message = wxString::Format("Error: %s (Code: %d)", error->message_, error->code_);
+
                 wxMessageBox(error_message, "Login Failed", wxOK | wxICON_ERROR);
-                m_next->Enable();
-                m_entry->SetFocus();
                 m_entry->SelectAll();
-            });
-        }
+            }
+        });
     };
 
     if (m_loginState == LOGIN_PHONE) {

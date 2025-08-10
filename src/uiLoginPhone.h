@@ -5,6 +5,8 @@
 #include <wx/simplebook.h>
 #include <wx/wx.h>
 
+wxDECLARE_EVENT(wxEVT_TDLIB_UPDATE, wxCommandEvent);
+
 class CLoginPhoneWindow : public wxPanel {
   public:
     enum ELoginState {
@@ -17,6 +19,7 @@ class CLoginPhoneWindow : public wxPanel {
 
     void OnNextPressed(wxCommandEvent& event);
     void OnCancelPressed(wxCommandEvent& event);
+    void OnTdlibUpdate(wxCommandEvent& event);
 
     void SwitchLoginState(const ELoginState& newState);
 
