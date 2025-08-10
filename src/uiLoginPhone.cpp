@@ -1,12 +1,15 @@
 #include "uiLoginPhone.h"
 
+#include "uiLogin.h"
 #include "uiMainFrame.h"
+#include "uiMainWindow.h"
 
 #include <td/telegram/td_api.hpp>
+#include <wx/msgdlg.h>
 
 extern CMainFrame* g_mainFrame;
 
-CLoginPhoneWindow::CLoginPhoneWindow(wxSimplebook* book)
+CLoginPhoneWindow::CLoginPhoneWindow(wxSimplebook* book, TdManager& manager)
     : wxPanel(book, wxID_ANY), m_book(book), m_loginState(LOGIN_PHONE) {
     auto* mainSizer = new wxBoxSizer(wxVERTICAL);
     m_label = new wxStaticText(this, wxID_ANY, wxEmptyString);
@@ -27,22 +30,37 @@ CLoginPhoneWindow::CLoginPhoneWindow(wxSimplebook* book)
 
     m_next->Bind(wxEVT_BUTTON, &CLoginPhoneWindow::OnNextPressed, this);
     m_cancel->Bind(wxEVT_BUTTON, &CLoginPhoneWindow::OnCancelPressed, this);
+    m_entry->Bind(wxEVT_TEXT_ENTER, &CLoginPhoneWindow::OnNextPressed, this);
 
-    SwitchLoginState(m_loginState);
-
-    g_mainFrame->getTdManager()->setUpdateCallback([this](td::td_api::object_ptr<td::td_api::Object> update) {
+    manager.setUpdateCallback([this](td::td_api::object_ptr<td::td_api::Object> update) {
         if (update->get_id() == td::td_api::updateAuthorizationState::ID) {
             auto auth_state = td::td_api::move_object_as<td::td_api::updateAuthorizationState>(update);
-            if (auth_state->authorization_state_->get_id() == td::td_api::authorizationStateWaitCode::ID) {
-                CallAfter([this]() { SwitchLoginState(LOGIN_CODE); });
-            } else if (auth_state->authorization_state_->get_id() == td::td_api::authorizationStateReady::ID) {
-            }
+            auto state_id = auth_state->authorization_state_->get_id();
+
+            CallAfter([this, state_id]() {
+                if (state_id == td::td_api::authorizationStateWaitCode::ID) {
+                    SwitchLoginState(LOGIN_CODE);
+                } else if (state_id == td::td_api::authorizationStateWaitPassword::ID) {
+                    SwitchLoginState(LOGIN_PASSWORD);
+                } else if (state_id == td::td_api::authorizationStateReady::ID) {
+                    m_book->SetSelection(m_book->FindPage(g_mainFrame->m_mainWindow));
+                } else if (state_id == td::td_api::authorizationStateClosed::ID) {
+                    wxMessageBox("Authentication failed or was terminated. Please try again.", "Login Error",
+                                 wxOK | wxICON_ERROR);
+                    wxCommandEvent evt;
+                    OnCancelPressed(evt);
+                }
+            });
         }
     });
+
+    SwitchLoginState(m_loginState);
 }
 
 void CLoginPhoneWindow::SwitchLoginState(const ELoginState& newState) {
     m_loginState = newState;
+    m_entry->SetWindowStyle(m_entry->GetWindowStyle() & ~wxTE_PASSWORD);
+
     switch (m_loginState) {
         case LOGIN_PHONE:
             m_label->SetLabelText("Enter your phone number:");
@@ -61,27 +79,48 @@ void CLoginPhoneWindow::SwitchLoginState(const ELoginState& newState) {
             m_entry->SetWindowStyle(m_entry->GetWindowStyle() | wxTE_PASSWORD);
             break;
     }
+
+    m_next->Enable();
     m_entry->SetFocus();
     Layout();
 }
 
 void CLoginPhoneWindow::OnNextPressed(wxCommandEvent& event) {
-    wxString value = m_entry->GetValue();
+    wxString value = m_entry->GetValue().Trim();
+
+    if (value.IsEmpty()) {
+        wxMessageBox("The field cannot be empty.", "Input Error", wxOK | wxICON_WARNING);
+        return;
+    }
+
+    m_next->Disable();
+
+    auto response_handler = [this](td::td_api::object_ptr<td::td_api::Object> object) {
+        if (object->get_id() == td::td_api::error::ID) {
+            auto error = td::td_api::move_object_as<td::td_api::error>(object);
+            wxString error_message = wxString::Format("Error: %s (Code: %d)", error->message_, error->code_);
+
+            CallAfter([this, error_message]() {
+                wxMessageBox(error_message, "Login Failed", wxOK | wxICON_ERROR);
+                m_next->Enable();
+                m_entry->SetFocus();
+                m_entry->SelectAll();
+            });
+        }
+    };
 
     if (m_loginState == LOGIN_PHONE) {
         auto set_phone_number = td::td_api::make_object<td::td_api::setAuthenticationPhoneNumber>();
         set_phone_number->phone_number_ = value.ToStdString();
-
-        g_mainFrame->getTdManager()->send(std::move(set_phone_number),
-                                          [](td::td_api::object_ptr<td::td_api::Object> object) {});
-
+        g_mainFrame->getTdManager()->send(std::move(set_phone_number), response_handler);
     } else if (m_loginState == LOGIN_CODE) {
         auto check_code = td::td_api::make_object<td::td_api::checkAuthenticationCode>();
         check_code->code_ = value.ToStdString();
-
-        g_mainFrame->getTdManager()->send(std::move(check_code), [](td::td_api::object_ptr<td::td_api::Object> object) {
-            if (object->get_id() == td::td_api::error::ID) {}
-        });
+        g_mainFrame->getTdManager()->send(std::move(check_code), response_handler);
+    } else if (m_loginState == LOGIN_PASSWORD) {
+        auto check_password = td::td_api::make_object<td::td_api::checkAuthenticationPassword>();
+        check_password->password_ = value.ToStdString();
+        g_mainFrame->getTdManager()->send(std::move(check_password), response_handler);
     }
 }
 

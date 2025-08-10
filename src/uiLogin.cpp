@@ -30,18 +30,7 @@ extern CMainFrame* g_mainFrame;
 void CLoginWindow::OnLoginPressed(wxCommandEvent& event) {
     bool useTestDataCenter = m_useTestDataCenter->IsChecked();
 
-    auto set_params = td::td_api::make_object<td::td_api::setTdlibParameters>();
-    set_params->api_id_ = API_ID;
-    set_params->api_hash_ = API_HASH;
-    set_params->database_directory_ = "tdlib";
-    set_params->use_test_dc_ = useTestDataCenter;
-    set_params->device_model_ = "Desktop";
-    set_params->system_language_code_ = "en";
-    set_params->application_version_ = "0.1";
-
-    g_mainFrame->getTdManager()->send(std::move(set_params), nullptr);
     if (m_book->FindPage(g_mainFrame->m_loginPhoneWindow) == wxNOT_FOUND) {
-        g_mainFrame->m_loginPhoneWindow = new CLoginPhoneWindow(m_book);
         m_book->AddPage(g_mainFrame->m_loginPhoneWindow, "LoginPhone");
     }
     m_book->SetSelection(m_book->FindPage(g_mainFrame->m_loginPhoneWindow));

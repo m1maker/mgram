@@ -21,6 +21,7 @@ void TdManager::send(td::td_api::object_ptr<td::td_api::Function> function, Upda
 }
 
 void TdManager::setUpdateCallback(UpdateCallback callback) {
+    std::lock_guard<std::mutex> lock(update_mutex_);
     update_callback_ = std::move(callback);
 }
 
@@ -47,6 +48,7 @@ void TdManager::processResponse(td::ClientManager::Response response) {
 }
 
 void TdManager::processUpdate(Object update) {
+    std::lock_guard<std::mutex> lock(update_mutex_);
     if (update_callback_) {
         update_callback_(std::move(update));
     }

@@ -6,4 +6,5 @@
 
 inline constexpr unsigned long long API_ID = TDAPI_ID;
 inline auto& API_HASH = AY_OBFUSCATE(TDAPI_HASH);
+
 #endif

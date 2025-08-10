@@ -38,7 +38,7 @@ class TdManager {
     UpdateCallback update_callback_;
     std::map<std::uint64_t, UpdateCallback> handlers_;
     std::mutex handlers_mutex_;
-    std::mutex update_mutex;
+    std::mutex update_mutex_;
 };
 
 #endif

@@ -1,20 +1,19 @@
 #ifndef UI_LOGIN_PHONE_H
 #define UI_LOGIN_PHONE_H
+#include "tdManager.h"
 
 #include <wx/simplebook.h>
 #include <wx/wx.h>
 
 class CLoginPhoneWindow : public wxPanel {
+  public:
     enum ELoginState {
         LOGIN_PHONE,
         LOGIN_CODE,
         LOGIN_PASSWORD
     };
 
-    ELoginState m_loginState;
-
-  public:
-    CLoginPhoneWindow(wxSimplebook* book);
+    CLoginPhoneWindow(wxSimplebook* book, TdManager& manager);
 
     void OnNextPressed(wxCommandEvent& event);
     void OnCancelPressed(wxCommandEvent& event);
@@ -27,6 +26,7 @@ class CLoginPhoneWindow : public wxPanel {
     wxButton* m_next;
     wxButton* m_cancel;
     wxSimplebook* m_book;
+    ELoginState m_loginState;
 };
 
 #endif
