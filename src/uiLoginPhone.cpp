@@ -33,16 +33,14 @@ CLoginPhoneWindow::CLoginPhoneWindow(wxSimplebook* book, TdManager& manager)
     m_next->Bind(wxEVT_BUTTON, &CLoginPhoneWindow::OnNextPressed, this);
     m_cancel->Bind(wxEVT_BUTTON, &CLoginPhoneWindow::OnCancelPressed, this);
     m_entry->Bind(wxEVT_TEXT_ENTER, &CLoginPhoneWindow::OnNextPressed, this);
-
     Bind(wxEVT_TDLIB_UPDATE, &CLoginPhoneWindow::OnTdlibUpdate, this);
 
     manager.setUpdateCallback([this](td::td_api::object_ptr<td::td_api::Object> update) {
         if (update->get_id() == td::td_api::updateAuthorizationState::ID) {
             auto auth_state = td::td_api::move_object_as<td::td_api::updateAuthorizationState>(update);
-            auto state_id = auth_state->authorization_state_->get_id();
-
-            wxCommandEvent* event = new wxCommandEvent(wxEVT_TDLIB_UPDATE);
-            event->SetInt(state_id);
+            
+            auto* event = new wxCommandEvent(wxEVT_TDLIB_UPDATE);
+            event->SetClientData(auth_state.release()); 
             wxQueueEvent(this, event);
         }
     });
@@ -51,14 +49,19 @@ CLoginPhoneWindow::CLoginPhoneWindow(wxSimplebook* book, TdManager& manager)
 }
 
 void CLoginPhoneWindow::OnTdlibUpdate(wxCommandEvent& event) {
-    auto state_id = event.GetInt();
+    td::td_api::object_ptr<td::td_api::AuthorizationState> auth_state(
+        static_cast<td::td_api::AuthorizationState*>(event.GetClientData()));
+
+    auto state_id = auth_state->get_id();
 
     if (state_id == td::td_api::authorizationStateWaitCode::ID) {
         SwitchLoginState(LOGIN_CODE);
     } else if (state_id == td::td_api::authorizationStateWaitPassword::ID) {
         SwitchLoginState(LOGIN_PASSWORD);
     } else if (state_id == td::td_api::authorizationStateReady::ID) {
-        m_book->SetSelection(m_book->FindPage(g_mainFrame->m_mainWindow));
+        if (g_mainFrame && g_mainFrame->m_mainWindow) {
+            m_book->SetSelection(m_book->FindPage(g_mainFrame->m_mainWindow));
+        }
     } else if (state_id == td::td_api::authorizationStateClosed::ID) {
         wxMessageBox("Authentication failed or was terminated. Please try again.", "Login Error", wxOK | wxICON_ERROR);
         wxCommandEvent evt;
@@ -107,23 +110,18 @@ void CLoginPhoneWindow::OnNextPressed(wxCommandEvent& event) {
     m_entry->Disable();
 
     auto response_handler = [this](td::td_api::object_ptr<td::td_api::Object> object) {
-        td::td_api::Object* raw_object = object.release();
+        if (object->get_id() == td::td_api::error::ID) {
+            auto error = td::td_api::move_object_as<td::td_api::error>(object);
+            wxString error_message = wxString::Format("Error: %s (Code: %d)", error->message_, error->code_);
 
-        CallAfter([this, raw_object]() {
-            td::td_api::object_ptr<td::td_api::Object> object(raw_object);
-
-            m_next->Enable();
-            m_entry->Enable();
-            m_entry->SetFocus();
-
-            if (object->get_id() == td::td_api::error::ID) {
-                auto error = td::td_api::move_object_as<td::td_api::error>(std::move(object));
-                wxString error_message = wxString::Format("Error: %s (Code: %d)", error->message_, error->code_);
-
+            CallAfter([this, error_message]() {
                 wxMessageBox(error_message, "Login Failed", wxOK | wxICON_ERROR);
+                m_next->Enable();
+                m_entry->Enable();
                 m_entry->SelectAll();
-            }
-        });
+                m_entry->SetFocus();
+            });
+        }
     };
 
     if (m_loginState == LOGIN_PHONE) {
@@ -143,8 +141,11 @@ void CLoginPhoneWindow::OnNextPressed(wxCommandEvent& event) {
 
 void CLoginPhoneWindow::OnCancelPressed(wxCommandEvent& event) {
     SwitchLoginState(LOGIN_PHONE);
+    g_mainFrame->getTdManager()->send(td::td_api::make_object<td::td_api::logOut>());
 
-    if (m_book->FindPage(g_mainFrame->m_loginWindow) != wxNOT_FOUND) {
-        m_book->SetSelection(m_book->FindPage(g_mainFrame->m_loginWindow));
+    if (m_book && g_mainFrame && g_mainFrame->m_loginWindow) {
+        if (m_book->FindPage(g_mainFrame->m_loginWindow) != wxNOT_FOUND) {
+            m_book->SetSelection(m_book->FindPage(g_mainFrame->m_loginWindow));
+        }
     }
 }
