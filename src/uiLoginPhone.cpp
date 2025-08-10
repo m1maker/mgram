@@ -7,8 +7,6 @@
 #include <td/telegram/td_api.hpp>
 #include <wx/msgdlg.h>
 
-wxDEFINE_EVENT(wxEVT_TDLIB_UPDATE, wxCommandEvent);
-
 extern CMainFrame* g_mainFrame;
 
 CLoginPhoneWindow::CLoginPhoneWindow(wxSimplebook* book, TdManager& manager)
@@ -33,40 +31,8 @@ CLoginPhoneWindow::CLoginPhoneWindow(wxSimplebook* book, TdManager& manager)
     m_next->Bind(wxEVT_BUTTON, &CLoginPhoneWindow::OnNextPressed, this);
     m_cancel->Bind(wxEVT_BUTTON, &CLoginPhoneWindow::OnCancelPressed, this);
     m_entry->Bind(wxEVT_TEXT_ENTER, &CLoginPhoneWindow::OnNextPressed, this);
-    Bind(wxEVT_TDLIB_UPDATE, &CLoginPhoneWindow::OnTdlibUpdate, this);
-
-    manager.setUpdateCallback([this](td::td_api::object_ptr<td::td_api::Object> update) {
-        if (update->get_id() == td::td_api::updateAuthorizationState::ID) {
-            auto auth_state = td::td_api::move_object_as<td::td_api::updateAuthorizationState>(update);
-
-            auto* event = new wxCommandEvent(wxEVT_TDLIB_UPDATE);
-            event->SetClientData(auth_state.release());
-            wxQueueEvent(this, event);
-        }
-    });
 
     SwitchLoginState(m_loginState);
-}
-
-void CLoginPhoneWindow::OnTdlibUpdate(wxCommandEvent& event) {
-    td::td_api::object_ptr<td::td_api::AuthorizationState> auth_state(
-        static_cast<td::td_api::AuthorizationState*>(event.GetClientData()));
-
-    auto state_id = auth_state->get_id();
-
-    if (state_id == td::td_api::authorizationStateWaitCode::ID) {
-        SwitchLoginState(LOGIN_CODE);
-    } else if (state_id == td::td_api::authorizationStateWaitPassword::ID) {
-        SwitchLoginState(LOGIN_PASSWORD);
-    } else if (state_id == td::td_api::authorizationStateReady::ID) {
-        if (g_mainFrame && g_mainFrame->m_mainWindow) {
-            m_book->SetSelection(m_book->FindPage(g_mainFrame->m_mainWindow));
-        }
-    } else if (state_id == td::td_api::authorizationStateClosed::ID) {
-        wxMessageBox("Authentication failed or was terminated. Please try again.", "Login Error", wxOK | wxICON_ERROR);
-        wxCommandEvent evt;
-        OnCancelPressed(evt);
-    }
 }
 
 void CLoginPhoneWindow::SwitchLoginState(const ELoginState& newState) {

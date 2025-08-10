@@ -52,22 +52,33 @@ void CMainFrame::InitializeTdlib() {
     m_tdManager.send(std::move(set_params), nullptr);
 }
 
+#include <wx/msgdlg.h>
 void CMainFrame::OnAuthorizationStateUpdate(td::td_api::object_ptr<td::td_api::Object> update) {
     auto auth_state = td::td_api::move_object_as<td::td_api::updateAuthorizationState>(update);
     auto state_id = auth_state->authorization_state_->get_id();
 
     if (state_id == td::td_api::authorizationStateReady::ID) {
         m_book->SetSelection(m_book->FindPage(m_mainWindow));
+		return;
     } else if (state_id == td::td_api::authorizationStateWaitPhoneNumber::ID) {
         m_book->SetSelection(m_book->FindPage(m_loginWindow));
-    } else if (state_id == td::td_api::authorizationStateWaitCode::ID) {
-        // This can happen if the app was closed after entering the phone number
-        // We can switch to the code entry screen directly
-        if (m_loginPhoneWindow) {
-            m_loginPhoneWindow->SwitchLoginState(CLoginPhoneWindow::LOGIN_CODE);
-            m_book->SetSelection(m_book->FindPage(m_loginPhoneWindow));
-        }
+		return;
     }
+
+	if (!m_loginPhoneWindow) return;
+
+	m_book->SetSelection(m_book->FindPage(m_loginPhoneWindow));
+	if (state_id == td::td_api::authorizationStateWaitCode::ID) {
+        m_loginPhoneWindow->SwitchLoginState(CLoginPhoneWindow::LOGIN_CODE);
+    }
+	else if (state_id == td::td_api::authorizationStateWaitPassword::ID) {
+		m_loginPhoneWindow->SwitchLoginState(CLoginPhoneWindow::LOGIN_PASSWORD);
+	}
+	else if (state_id == td::td_api::authorizationStateClosed::ID) {
+		wxMessageBox("Authentication failed or was terminated. Please try again.", "Login Error", wxOK | wxICON_ERROR);
+		wxCommandEvent evt;
+		m_loginPhoneWindow->OnCancelPressed(evt);
+	}
 }
 
 bool CMgramEntry::OnInit() {
