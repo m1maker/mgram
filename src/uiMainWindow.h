@@ -9,13 +9,15 @@
 #include <wx/splitter.h>
 #include <wx/wx.h>
 
-class CMainWindow : public wxPanel {
+class CMainWindow final : public wxPanel {
   public:
     CMainWindow(wxSimplebook* book);
+
     void ProcessUpdate(td::td_api::object_ptr<td::td_api::Object> update);
-    void ProcessChatUpdate(td::td_api::object_ptr<td::td_api::chat> chat);
 
   private:
+    void ProcessChatUpdate(td::td_api::object_ptr<td::td_api::chat> chat);
+
     void OnChatSelected(wxCommandEvent& event);
     void OnSendPressed(wxCommandEvent& event);
     void LoadChats();

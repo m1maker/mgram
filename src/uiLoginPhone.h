@@ -5,9 +5,9 @@
 #include <wx/simplebook.h>
 #include <wx/wx.h>
 
-class CLoginPhoneWindow : public wxPanel {
+class CLoginPhoneWindow final : public wxPanel {
   public:
-    enum ELoginState {
+    enum ELoginState : unsigned char {
         LOGIN_PHONE,
         LOGIN_CODE,
         LOGIN_PASSWORD

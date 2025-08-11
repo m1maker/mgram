@@ -4,7 +4,7 @@
 #include <wx/simplebook.h>
 #include <wx/wx.h>
 
-class CLoginWindow : public wxPanel {
+class CLoginWindow final : public wxPanel {
   public:
     CLoginWindow(wxSimplebook* book);
 

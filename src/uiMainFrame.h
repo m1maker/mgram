@@ -10,7 +10,7 @@ class CLoginWindow;
 class CLoginPhoneWindow;
 class CMainWindow;
 
-class CMainFrame : public wxFrame {
+class CMainFrame final : public wxFrame {
   public:
     CLoginWindow* m_loginWindow;
     CLoginPhoneWindow* m_loginPhoneWindow;
@@ -29,7 +29,7 @@ class CMainFrame : public wxFrame {
 
 extern CMainFrame* g_mainFrame;
 
-class CMgramEntry : public wxApp {
+class CMgramEntry final : public wxApp {
   public:
     virtual bool OnInit() override;
 };

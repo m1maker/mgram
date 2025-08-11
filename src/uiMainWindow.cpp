@@ -6,9 +6,9 @@
 #include <wx/listbox.h>
 #include <wx/wx.h>
 
-class CChatClientData : public wxClientData {
+class CChatClientData final : public wxClientData {
   public:
-    CChatClientData(long long chatId, long long sortKey) : m_chatId(chatId), m_sortKey(sortKey) {}
+    explicit CChatClientData(long long chatId, long long sortKey) : m_chatId(chatId), m_sortKey(sortKey) {}
 
     long long GetChatId() const { return m_chatId; }
     long long GetSortKey() const { return m_sortKey; }
