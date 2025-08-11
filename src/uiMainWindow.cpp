@@ -66,13 +66,13 @@ void CMainWindow::ProcessChatUpdate(td::td_api::object_ptr<td::td_api::chat> cha
     }
 
     long long chatId = chat->id_;
-    s_chats[chatId] = std::move(chat);
+    m_chats[chatId] = std::move(chat);
     UpdateChatInList(chatId);
 }
 
 void CMainWindow::UpdateChatInList(long long chatId) {
-    auto it = s_chats.find(chatId);
-    if (it == s_chats.end()) {
+    auto it = m_chats.find(chatId);
+    if (it == m_chats.end()) {
         return;
     }
 
@@ -179,7 +179,7 @@ void CMainWindow::ProcessUpdate(td::td_api::object_ptr<td::td_api::Object> updat
         }
         case td::td_api::updateUser::ID: {
             auto user_update = td::td_api::move_object_as<td::td_api::updateUser>(update);
-            s_users[user_update->user_->id_] = std::move(user_update->user_);
+            m_users[user_update->user_->id_] = std::move(user_update->user_);
             break;
         }
         default:
@@ -205,16 +205,16 @@ void CMainWindow::OnChatSelected(wxCommandEvent& event) {
 }
 
 void CMainWindow::GetUser(long long userId, std::function<void(const td::td_api::user*)> callback) {
-    auto it = s_users.find(userId);
-    if (it != s_users.end()) {
+    auto it = m_users.find(userId);
+    if (it != m_users.end()) {
         callback(it->second.get());
     } else {
         g_mainFrame->getTdManager()->send(td::td_api::make_object<td::td_api::getUser>(userId),
                                           [this, callback](TdManager::Object userObject) {
                                               if (userObject->get_id() == td::td_api::user::ID) {
                                                   auto user = td::td_api::move_object_as<td::td_api::user>(userObject);
-                                                  s_users[user->id_] = std::move(user);
-                                                  callback(s_users[user->id_].get());
+                                                  m_users[user->id_] = std::move(user);
+                                                  callback(m_users[user->id_].get());
                                               } else {
                                                   callback(nullptr);
                                               }
@@ -245,8 +245,8 @@ void CMainWindow::LoadMessages(long long chatId) {
                 } else if (message->sender_id_->get_id() == td::td_api::messageSenderChat::ID) {
                     long long sender_chat_id =
                         static_cast<td::td_api::messageSenderChat*>(message->sender_id_.get())->chat_id_;
-                    auto chat_it = s_chats.find(sender_chat_id);
-                    if (chat_it != s_chats.end()) {
+                    auto chat_it = m_chats.find(sender_chat_id);
+                    if (chat_it != m_chats.end()) {
                         sender_name = wxString::FromUTF8(chat_it->second->title_);
                     }
                 }
