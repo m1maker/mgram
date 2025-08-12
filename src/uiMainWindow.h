@@ -34,7 +34,7 @@ class CMainWindow final : public wxPanel {
     void AppendMessage(const td::td_api::object_ptr<td::td_api::message>& message);
 
     void UpdateChatInList(long long chatId);
-    void OnScrollToTop(wxScrollWinEvent& event);
+    void OnMessageSelected(wxCommandEvent& event);
 
     wxSimplebook* m_book;
     wxListBox* m_chatList;

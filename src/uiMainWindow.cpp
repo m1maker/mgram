@@ -40,7 +40,7 @@ CMainWindow::CMainWindow(wxSimplebook* book)
     rightSizer->Add(messagesLabel, 0, wxALL, 5);
     rightSizer->Add(m_messageView, 1, wxEXPAND | wxALL, 5);
 
-    m_messageView->Bind(wxEVT_SCROLLWIN_TOP, &CMainWindow::OnScrollToTop, this);
+    m_messageView->Bind(wxEVT_LISTBOX, &CMainWindow::OnMessageSelected, this);
 
     auto* bottomSizer = new wxBoxSizer(wxHORIZONTAL);
     m_messageInputLabel = new wxStaticText(rightPanel, wxID_ANY, "Message:", wxDefaultPosition, wxDefaultSize);
@@ -309,7 +309,7 @@ void CMainWindow::OnChatSelected(wxCommandEvent& event) {
     }
 }
 
-void CMainWindow::OnScrollToTop(wxScrollWinEvent& event) {
+void CMainWindow::OnMessageSelected(wxCommandEvent& event) {
     LoadMessages(m_currentChatId);
     event.Skip();
 }
