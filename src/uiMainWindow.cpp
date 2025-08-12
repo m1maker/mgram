@@ -2,6 +2,7 @@
 
 #include "uiMainFrame.h"
 
+#include <atomic>
 #include <utility>
 #include <wx/datetime.h>
 #include <wx/listbox.h>
@@ -17,6 +18,121 @@ class CChatClientData final : public wxClientData {
     long long m_chatId;
     long long m_sortKey;
 };
+
+static wxString FormatTimestamp(int32_t unix_time) {
+    if (unix_time == 0) {
+        return "N/A";
+    }
+    wxDateTime dt(static_cast<time_t>(unix_time));
+    return dt.Format("%Y-%m-%d %H:%M");
+}
+
+static wxString FormatMessageContentPreview(const td::td_api::MessageContent* content) {
+    if (!content) {
+        return "No messages";
+    }
+    switch (content->get_id()) {
+        case td::td_api::messageText::ID: {
+            auto* textContent = static_cast<const td::td_api::messageText*>(content);
+            return wxString::FromUTF8(textContent->text_->text_);
+        }
+        case td::td_api::messageAnimation::ID:
+            return "[Animation]";
+        case td::td_api::messageAudio::ID:
+            return "[Audio]";
+        case td::td_api::messageDocument::ID:
+            return "[File]";
+        case td::td_api::messagePhoto::ID:
+            return "[Photo]";
+        case td::td_api::messageSticker::ID:
+            return "[Sticker]";
+        case td::td_api::messageVideo::ID:
+            return "[Video]";
+        case td::td_api::messageVoiceNote::ID:
+            return "[Voice message]";
+        case td::td_api::messageCall::ID:
+            return "[Call]";
+        case td::td_api::messageContact::ID:
+            return "[Contact]";
+        case td::td_api::messageLocation::ID:
+            return "[Location]";
+        case td::td_api::messagePoll::ID:
+            return "[Poll]";
+        case td::td_api::messageVideoNote::ID:
+            return "[Video message]";
+        case td::td_api::messageChatAddMembers::ID:
+            return "[Service: New members]";
+        case td::td_api::messageChatChangeTitle::ID: {
+            auto* titleChange = static_cast<const td::td_api::messageChatChangeTitle*>(content);
+            return "Title changed to " + wxString::FromUTF8(titleChange->title_);
+        }
+        case td::td_api::messagePinMessage::ID:
+            return "[Service: Pinned a message]";
+        default:
+            return "[Unsupported message]";
+    }
+}
+
+static wxString FormatMessageContent(const td::td_api::MessageContent* content) {
+    if (!content) {
+        return "[Empty message]";
+    }
+    wxString formatted_content;
+    wxString type_str;
+
+    switch (content->get_id()) {
+        case td::td_api::messageText::ID: {
+            auto* textContent = static_cast<const td::td_api::messageText*>(content);
+            return wxString::FromUTF8(textContent->text_->text_);
+        }
+        case td::td_api::messageVoiceNote::ID: {
+            auto* voice = static_cast<const td::td_api::messageVoiceNote*>(content);
+            type_str = "Voice";
+            if (voice->voice_note_) {
+                formatted_content = wxString::Format("%d seconds", voice->voice_note_->duration_);
+            }
+            break;
+        }
+        case td::td_api::messageDocument::ID: {
+            auto* doc = static_cast<const td::td_api::messageDocument*>(content);
+            type_str = "File";
+            formatted_content = wxString::FromUTF8(doc->document_->file_name_);
+            break;
+        }
+        case td::td_api::messagePhoto::ID: {
+            type_str = "Photo";
+            auto* photo = static_cast<const td::td_api::messagePhoto*>(content);
+            if (!photo->caption_->text_.empty()) {
+                formatted_content = wxString::FromUTF8(photo->caption_->text_);
+            }
+            break;
+        }
+        case td::td_api::messageVideo::ID: {
+            type_str = "Video";
+            auto* video = static_cast<const td::td_api::messageVideo*>(content);
+            if (!video->caption_->text_.empty()) {
+                formatted_content = wxString::FromUTF8(video->caption_->text_);
+            }
+            break;
+        }
+        case td::td_api::messageChatAddMembers::ID:
+            type_str = "Service";
+            formatted_content = "Members added";
+            break;
+        case td::td_api::messageChatChangeTitle::ID: {
+            type_str = "Service";
+            auto* title_change = static_cast<const td::td_api::messageChatChangeTitle*>(content);
+            formatted_content = "Title changed to " + wxString::FromUTF8(title_change->title_);
+            break;
+        }
+        default:
+            type_str = "Other";
+            formatted_content = "Unsupported content";
+            break;
+    }
+
+    return type_str + (formatted_content.IsEmpty() ? "" : ", " + formatted_content);
+}
 
 CMainWindow::CMainWindow(wxSimplebook* book)
     : wxPanel(book, wxID_ANY), m_book(book), m_currentChatId(0), m_lastMessageId(0), m_loadingMore(false) {
@@ -81,96 +197,92 @@ void CMainWindow::UpdateChatInList(long long chatId) {
     if (it == m_chats.end()) {
         return;
     }
-
     auto& chat = it->second;
 
     if (chat->type_->get_id() == td::td_api::chatTypePrivate::ID) {
         auto* privateChat = static_cast<td::td_api::chatTypePrivate*>(chat->type_.get());
-
         GetUser(privateChat->user_id_, [this, chatId](const td::td_api::user* user) {
-            if (!user) {
+            if (!user)
                 return;
+            auto chat_it = m_chats.find(chatId);
+            if (chat_it != m_chats.end()) {
+                FormatAndUpdateChatListEntry(chat_it->second, user);
             }
-
-            auto it_lambda = m_chats.find(chatId);
-            if (it_lambda == m_chats.end()) {
-                return;
-            }
-            auto& chat_lambda = it_lambda->second;
-
-            chat_lambda->title_ = user->first_name_ + " " + user->last_name_;
-
-            wxString unread_str =
-                chat_lambda->unread_count_ > 0 ? wxString::Format("[%d] ", chat_lambda->unread_count_) : "";
-            wxString lastMessageText = "No messages";
-            if (chat_lambda->last_message_) {
-                if (chat_lambda->last_message_->content_->get_id() == td::td_api::messageText::ID) {
-                    auto* textContent =
-                        static_cast<const td::td_api::messageText*>(chat_lambda->last_message_->content_.get());
-                    lastMessageText = wxString::FromUTF8(textContent->text_->text_);
-                } else {
-                    lastMessageText = "[Media]";
-                }
-            }
-
-            wxString final_display_str =
-                wxString::Format("%s%s: %s", unread_str, wxString::FromUTF8(chat_lambda->title_), lastMessageText);
-            long long order = 0;
-            bool is_pinned = false;
-
-            if (!chat_lambda->positions_.empty()) {
-                for (const auto& pos : chat_lambda->positions_) {
-                    if (pos != nullptr && pos->list_->get_id() == td::td_api::chatListMain::ID) {
-                        order = pos->order_;
-                        is_pinned = pos->is_pinned_;
-                        break;
-                    }
-                }
-            }
-
-            long long sortKey = (static_cast<long long>(is_pinned) << 62) | order;
-
-            CallAfter([this, chatId, final_display_str, sortKey]() {
-                m_chatList->Freeze();
-                for (unsigned int i = 0; i < m_chatList->GetCount(); ++i) {
-                    auto* clientData = static_cast<CChatClientData*>(m_chatList->GetClientObject(i));
-                    if (clientData && clientData->GetChatId() == chatId) {
-                        m_chatList->Delete(i);
-                        break;
-                    }
-                }
-                unsigned int insertPos = 0;
-                for (; insertPos < m_chatList->GetCount(); ++insertPos) {
-                    auto* existingClientData = static_cast<CChatClientData*>(m_chatList->GetClientObject(insertPos));
-                    if (existingClientData && sortKey > existingClientData->GetSortKey()) {
-                        break;
-                    }
-                }
-                m_chatList->Insert(final_display_str, insertPos);
-                m_chatList->SetClientObject(insertPos, new CChatClientData(chatId, sortKey));
-                m_chatList->Thaw();
-            });
         });
-
         return;
     }
+    FormatAndUpdateChatListEntry(chat, nullptr);
+}
 
-    wxString unread_str = chat->unread_count_ > 0 ? wxString::Format("[%d] ", chat->unread_count_) : "";
-    wxString lastMessageText = "No messages";
-    if (chat->last_message_) {
-        if (chat->last_message_->content_->get_id() == td::td_api::messageText::ID) {
-            auto* textContent = static_cast<const td::td_api::messageText*>(chat->last_message_->content_.get());
-            lastMessageText = wxString::FromUTF8(textContent->text_->text_);
-        } else {
-            lastMessageText = "[Media]";
+void CMainWindow::FormatAndUpdateChatListEntry(const td::td_api::object_ptr<td::td_api::chat>& chat,
+                                               const td::td_api::user* user) {
+    long long chatId = chat->id_;
+    wxString display_str;
+
+    wxString type_prefix;
+    switch (chat->type_->get_id()) {
+        case td::td_api::chatTypePrivate::ID:
+            if (user && user->type_->get_id() == td::td_api::userTypeBot::ID) {
+                type_prefix = "Bot. ";
+            }
+            break;
+        case td::td_api::chatTypeBasicGroup::ID:
+            type_prefix = "Group. ";
+            break;
+        case td::td_api::chatTypeSecret::ID:
+            type_prefix = "Secret. ";
+            break;
+        case td::td_api::chatTypeSupergroup::ID: {
+            auto* sg = static_cast<const td::td_api::chatTypeSupergroup*>(chat->type_.get());
+            type_prefix = sg->is_channel_ ? "Channel. " : "Supergroup. ";
+            break;
+        }
+    }
+    display_str += type_prefix;
+
+    if (user) {
+        display_str += wxString::FromUTF8(user->first_name_ + " " + user->last_name_);
+    } else {
+        display_str += wxString::FromUTF8(chat->title_);
+    }
+
+    if (user && user->is_premium_)
+        display_str += ", Premium account";
+
+    if (user && user->status_) {
+        wxString status_str;
+        switch (user->status_->get_id()) {
+            case td::td_api::userStatusOnline::ID:
+                status_str = "online";
+                break;
+            case td::td_api::userStatusOffline::ID: {
+                auto* offline = static_cast<const td::td_api::userStatusOffline*>(user->status_.get());
+                status_str = "last seen at " + FormatTimestamp(offline->was_online_);
+                break;
+            }
+            case td::td_api::userStatusRecently::ID:
+                status_str = "last seen recently";
+                break;
+            default:
+                break;
+        }
+        if (!status_str.IsEmpty()) {
+            display_str += ", " + status_str;
         }
     }
 
-    wxString final_display_str =
-        wxString::Format("%s%s: %s", unread_str, wxString::FromUTF8(chat->title_), lastMessageText);
+    if (chat->unread_count_ > 0) {
+        display_str += wxString::Format(", %d unread messages", chat->unread_count_);
+    }
+
+    if (chat->last_message_) {
+        wxString timestamp = FormatTimestamp(chat->last_message_->date_);
+        wxString content_preview = FormatMessageContentPreview(chat->last_message_->content_.get());
+        display_str += wxString::Format(", received at %s: %s", timestamp, content_preview);
+    }
+
     long long order = 0;
     bool is_pinned = false;
-
     if (!chat->positions_.empty()) {
         for (const auto& pos : chat->positions_) {
             if (pos != nullptr && pos->list_->get_id() == td::td_api::chatListMain::ID) {
@@ -180,9 +292,9 @@ void CMainWindow::UpdateChatInList(long long chatId) {
             }
         }
     }
-
     long long sortKey = (static_cast<long long>(is_pinned) << 62) | order;
-    CallAfter([this, chatId, final_display_str, sortKey]() {
+
+    CallAfter([this, chatId, display_str, sortKey]() {
         m_chatList->Freeze();
         for (unsigned int i = 0; i < m_chatList->GetCount(); ++i) {
             auto* clientData = static_cast<CChatClientData*>(m_chatList->GetClientObject(i));
@@ -198,10 +310,33 @@ void CMainWindow::UpdateChatInList(long long chatId) {
                 break;
             }
         }
-        m_chatList->Insert(final_display_str, insertPos);
+        m_chatList->Insert(display_str, insertPos);
         m_chatList->SetClientObject(insertPos, new CChatClientData(chatId, sortKey));
         m_chatList->Thaw();
     });
+}
+
+wxString CMainWindow::FormatMessageForView(const td::td_api::message* message, const wxString& sender_name) {
+    if (!message)
+        return "";
+
+    wxString sender_str = sender_name;
+    wxString content_str = FormatMessageContent(message->content_.get());
+    wxString timestamp_str = FormatTimestamp(message->date_);
+
+    wxString sign_str;
+    if (!message->author_signature_.empty()) {
+        auto chat_it = m_chats.find(message->chat_id_);
+        if (chat_it != m_chats.end()) {
+            if (chat_it->second->type_->get_id() == td::td_api::chatTypeSupergroup::ID) {
+                auto* sg = static_cast<const td::td_api::chatTypeSupergroup*>(chat_it->second->type_.get());
+                if (sg && sg->is_channel_) {
+                    sign_str = " user " + wxString::FromUTF8(message->author_signature_);
+                }
+            }
+        }
+    }
+    return wxString::Format("%s%s: %s, received at %s", sender_str, sign_str, content_str, timestamp_str);
 }
 
 void CMainWindow::ProcessUpdate(td::td_api::object_ptr<td::td_api::Object> update) {
@@ -236,6 +371,7 @@ void CMainWindow::ProcessUpdate(td::td_api::object_ptr<td::td_api::Object> updat
             }
             auto it = m_chats.find(msg_update->message_->chat_id_);
             if (it != m_chats.end()) {
+                it->second->unread_count_++;
                 it->second->last_message_ = std::move(msg_update->message_);
                 UpdateChatInList(it->first);
             }
@@ -341,47 +477,73 @@ void CMainWindow::LoadMessages(long long chatId) {
     g_mainFrame->getTdManager()->send(std::move(getHistory), [this, chatId](TdManager::Object object) {
         if (object->get_id() == td::td_api::messages::ID) {
             auto messages = td::td_api::move_object_as<td::td_api::messages>(object);
-            if (!messages->messages_.empty()) {
-                m_lastMessageId = messages->messages_.back()->id_;
+            if (messages->messages_.empty()) {
+                m_loadingMore = false;
+                return;
+            }
+            m_lastMessageId = messages->messages_.back()->id_;
+
+            auto message_queue = std::make_shared<std::vector<td::td_api::object_ptr<td::td_api::message>>>(
+                std::move(messages->messages_));
+            auto history_strs = std::make_shared<std::vector<wxString>>(message_queue->size());
+            auto completed_count = std::make_shared<std::atomic<size_t>>(0);
+            size_t total_messages = message_queue->size();
+
+            if (total_messages == 0) {
+                m_loadingMore = false;
+                return;
             }
 
-            std::vector<wxString> history;
-
-            for (auto it = messages->messages_.rbegin(); it != messages->messages_.rend(); ++it) {
+            size_t i = 0;
+            for (auto it = message_queue->rbegin(); it != message_queue->rend(); ++it, ++i) {
                 const auto& message = *it;
+                const size_t history_idx = i;
 
+                long long sender_user_id = 0;
                 wxString sender_name = "Unknown";
+
                 if (message->sender_id_->get_id() == td::td_api::messageSenderUser::ID) {
-                    auto* sender = static_cast<const td::td_api::messageSenderUser*>(message->sender_id_.get());
-                    auto user_it = m_users.find(sender->user_id_);
-                    if (user_it != m_users.end()) {
-                        sender_name = wxString::FromUTF8(user_it->second->first_name_);
+                    sender_user_id =
+                        static_cast<const td::td_api::messageSenderUser*>(message->sender_id_.get())->user_id_;
+                } else if (message->sender_id_->get_id() == td::td_api::messageSenderChat::ID) {
+                    auto sender_chat_id =
+                        static_cast<const td::td_api::messageSenderChat*>(message->sender_id_.get())->chat_id_;
+                    auto chat_it = m_chats.find(sender_chat_id);
+                    if (chat_it != m_chats.end()) {
+                        sender_name = wxString::FromUTF8(chat_it->second->title_);
                     }
+                    (*history_strs)[history_idx] = FormatMessageForView(message.get(), sender_name);
+                    if (++(*completed_count) == total_messages) {
+                        CallAfter([this, history_strs]() {
+                            m_messageView->Freeze();
+                            for (auto str_it = history_strs->rbegin(); str_it != history_strs->rend(); ++str_it) {
+                                if (!str_it->IsEmpty())
+                                    m_messageView->Insert(*str_it, 0);
+                            }
+                            m_messageView->Thaw();
+                        });
+                    }
+                    continue;
                 }
 
-                wxString text = "[Unsupported Message Type]";
-                if (message->content_->get_id() == td::td_api::messageText::ID) {
-                    auto* textContent = static_cast<const td::td_api::messageText*>(message->content_.get());
-                    text = wxString::FromUTF8(textContent->text_->text_);
-                }
+                GetUser(sender_user_id, [this, history_idx, message_queue, message_ptr = message.get(), history_strs,
+                                         completed_count, total_messages](const td::td_api::user* user) {
+                    wxString name =
+                        (user) ? wxString::FromUTF8(user->first_name_ + " " + user->last_name_) : "Unknown User";
+                    (*history_strs)[history_idx] = FormatMessageForView(message_ptr, name);
 
-                history.push_back(wxString::Format("%s: %s", sender_name, text));
+                    if (++(*completed_count) == total_messages) {
+                        CallAfter([this, history_strs]() {
+                            m_messageView->Freeze();
+                            for (auto str_it = history_strs->rbegin(); str_it != history_strs->rend(); ++str_it) {
+                                if (!str_it->IsEmpty())
+                                    m_messageView->Insert(*str_it, 0);
+                            }
+                            m_messageView->Thaw();
+                        });
+                    }
+                });
             }
-
-            CallAfter([this, history = std::move(history)]() {
-                if (history.empty()) {
-                    return;
-                }
-
-                m_messageView->Freeze();
-
-                int insert_pos = 0;
-                for (const auto& msg_str : history) {
-                    m_messageView->Insert(msg_str, insert_pos++);
-                }
-
-                m_messageView->Thaw();
-            });
         }
         m_loadingMore = false;
     });
@@ -390,23 +552,31 @@ void CMainWindow::LoadMessages(long long chatId) {
 void CMainWindow::AppendMessage(const td::td_api::object_ptr<td::td_api::message>& message) {
     long long sender_user_id = 0;
     if (message->sender_id_->get_id() == td::td_api::messageSenderUser::ID) {
-        auto* sender = static_cast<const td::td_api::messageSenderUser*>(message->sender_id_.get());
-        sender_user_id = sender->user_id_;
+        sender_user_id = static_cast<const td::td_api::messageSenderUser*>(message->sender_id_.get())->user_id_;
     } else {
+        wxString sender_name = "A Chat";
+        if (message->sender_id_->get_id() == td::td_api::messageSenderChat::ID) {
+            auto sender_chat_id =
+                static_cast<const td::td_api::messageSenderChat*>(message->sender_id_.get())->chat_id_;
+            auto it = m_chats.find(sender_chat_id);
+            if (it != m_chats.end()) {
+                sender_name = wxString::FromUTF8(it->second->title_);
+            }
+        }
+        wxString formatted_msg = FormatMessageForView(message.get(), sender_name);
+        CallAfter([this, formatted_msg]() {
+            m_messageView->Append(formatted_msg);
+            m_messageView->SetSelection(m_messageView->GetCount() - 1);
+        });
         return;
     }
 
-    wxString text = "[Unsupported Message Type]";
-    if (message->content_->get_id() == td::td_api::messageText::ID) {
-        auto* textContent = static_cast<const td::td_api::messageText*>(message->content_.get());
-        text = wxString::FromUTF8(textContent->text_->text_);
-    }
-
-    GetUser(sender_user_id, [this, text](const td::td_api::user* user) {
+    GetUser(sender_user_id, [this, msg = message.get()](const td::td_api::user* user) {
         if (user) {
-            wxString name = wxString::FromUTF8(user->first_name_);
-            CallAfter([this, name, text]() {
-                m_messageView->Append(wxString::Format("%s: %s", name, text));
+            wxString name = wxString::FromUTF8(user->first_name_ + " " + user->last_name_);
+            wxString formatted_msg = FormatMessageForView(msg, name);
+            CallAfter([this, formatted_msg]() {
+                m_messageView->Append(formatted_msg);
                 m_messageView->SetSelection(m_messageView->GetCount() - 1);
             });
         }

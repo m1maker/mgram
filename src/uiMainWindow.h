@@ -25,6 +25,10 @@ class CMainWindow final : public wxPanel {
 
   private:
     void ProcessChatUpdate(td::td_api::object_ptr<td::td_api::chat> chat);
+    void FormatAndUpdateChatListEntry(const td::td_api::object_ptr<td::td_api::chat>& chat,
+                                      const td::td_api::user* user);
+
+    wxString FormatMessageForView(const td::td_api::message* message, const wxString& sender_name);
 
     void OnChatSelected(wxCommandEvent& event);
     void OnSendPressed(wxCommandEvent& event);
