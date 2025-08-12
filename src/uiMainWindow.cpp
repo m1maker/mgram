@@ -281,18 +281,17 @@ void CMainWindow::FormatAndUpdateChatListEntry(const td::td_api::object_ptr<td::
         display_str += wxString::Format(", received at %s: %s", timestamp, content_preview);
     }
 
-    long long order = 0;
     bool is_pinned = false;
     if (!chat->positions_.empty()) {
         for (const auto& pos : chat->positions_) {
             if (pos != nullptr && pos->list_->get_id() == td::td_api::chatListMain::ID) {
-                order = pos->order_;
+                m_lastChatOrder = pos->order_;
                 is_pinned = pos->is_pinned_;
                 break;
             }
         }
     }
-    long long sortKey = (static_cast<long long>(is_pinned) << 62) | order;
+    long long sortKey = (static_cast<long long>(is_pinned) << 62) | m_lastChatOrder;
 
     CallAfter([this, chatId, display_str, sortKey]() {
         m_chatList->Freeze();

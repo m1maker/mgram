@@ -1,8 +1,8 @@
-﻿# CMakeList.txt : CMake project for MGram, include source and define
+# CMakeList.txt : CMake project for MGram, include source and define
 # project specific logic here.
 #
 cmake_minimum_required (VERSION 3.25)
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 
 set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
@@ -28,8 +28,8 @@ endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
   wxMSVC_VERSION_ABI_COMPAT # Important for wxWidgets v3.3.0+
-TDAPI_ID=${TELEGRAM_API_ID}
-TDAPI_HASH="${TELEGRAM_API_HASH}"
+  TDAPI_ID=${TELEGRAM_API_ID}
+  TDAPI_HASH="${TELEGRAM_API_HASH}"
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE dep)
@@ -53,18 +53,28 @@ set(wxBUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(wxBUILD_DEMOS OFF CACHE BOOL "" FORCE)
 set(wxBUILD_INSTALL OFF CACHE BOOL "" FORCE)
 
-
 set(wxWidgets_USE_STATIC ON CACHE BOOL "" FORCE)
 set(wxUSE_EXTENDED_RTTI OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(wxWidgets)
 
 
 # TDLib
-find_package(Td REQUIRED)
+FetchContent_Declare(TDLib
+  GIT_REPOSITORY https://github.com/tdlib/td.git
+  GIT_TAG master
+  GIT_SHALLOW ON
+  SYSTEM
+)
+# --- TDLib Build Options ---
+# Prevent TDLib from running its own install commands.
+set(CMAKE_INSTALL_DEFAULT_COMPONENT_NAME "dev" CACHE STRING "" FORCE)
+FetchContent_MakeAvailable(TDLib)
+
+
+
 
 target_link_libraries(${PROJECT_NAME} PRIVATE
   wx::core
   wx::base
   Td::TdStatic
 )
-
