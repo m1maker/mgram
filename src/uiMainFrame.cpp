@@ -6,6 +6,9 @@
 #include "uiMainWindow.h"
 #include "uiTaskBarIcon.h"
 
+#include <wx/artprov.h>
+#include <wx/notifmsg.h>
+
 CMainFrame* g_mainFrame{nullptr};
 
 BEGIN_EVENT_TABLE(CMainFrame, wxFrame)
@@ -14,6 +17,11 @@ END_EVENT_TABLE()
 
 CMainFrame::CMainFrame(const wxString& title) : wxFrame(nullptr, wxID_ANY, title) {
     auto* taskBarIcon = new CMgramTaskBarIcon(this);
+    taskBarIcon->SetIcon(wxArtProvider::GetIcon(wxART_INFORMATION, wxART_OTHER, wxSize(16, 16)), "MGram");
+#ifdef _WIN32
+    wxNotificationMessage::UseTaskBarIcon(taskBarIcon);
+#endif
+
     auto* panel = new wxPanel(this, wxID_ANY);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
     m_book = new wxSimplebook(panel, wxID_ANY);
