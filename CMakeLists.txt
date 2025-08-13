@@ -13,7 +13,9 @@ if (POLICY CMP0141)
 endif()
 
 project ("MGram" VERSION 0.1)
-
+# For vorbis
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5
+)
 file(GLOB MGRAM_SOURCES "src/*.cpp")
 
 include(user/APIInfo.cmake)
@@ -73,8 +75,49 @@ FetchContent_MakeAvailable(TDLib)
 
 
 
+# miniaudio
+FetchContent_Declare(miniaudio
+  GIT_REPOSITORY https://github.com/mackron/miniaudio.git
+  GIT_TAG 0.11.22
+  GIT_SHALLOW ON
+  SYSTEM
+)
+# Disable unused APIs
+# Disable other features
+set(MINIAUDIO_DEBUG_OUTPUT OFF CACHE BOOL "" FORCE) # switch to on in case of debug
+set(MINIAUDIO_NO_EXTRA_NODES ON CACHE BOOL "" FORCE)
+set(MINIAUDIO_NO_GENERATION ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(miniaudio)
+
+# libvorbis
+FetchContent_Declare(vorbis
+  GIT_REPOSITORY https://github.com/xiph/vorbis.git
+  GIT_TAG master
+  GIT_SHALLOW ON
+  SYSTEM
+)
+
+
+# libogg
+FetchContent_Declare(ogg
+  GIT_REPOSITORY https://github.com/xiph/ogg.git
+  GIT_TAG master
+  GIT_SHALLOW ON
+  SYSTEM
+)
+
+
+
+FetchContent_MakeAvailable(vorbis)
+FetchContent_MakeAvailable(ogg)
+
+
+
+
 target_link_libraries(${PROJECT_NAME} PRIVATE
   wx::core
   wx::base
   Td::TdStatic
+miniaudio
+Vorbis::vorbisfile
 )

@@ -1,5 +1,6 @@
 #include "uiMainWindow.h"
 
+#include "notificationSender.h"
 #include "uiMainFrame.h"
 
 #include <atomic>
@@ -214,6 +215,7 @@ CMainWindow::CMainWindow(wxSimplebook* book)
     m_messageInput->Bind(wxEVT_TEXT_ENTER, &CMainWindow::OnSendPressed, this);
 
     m_currentChatList = td::td_api::make_object<td::td_api::chatListMain>();
+    m_chatList->SetFocus();
 }
 
 void CMainWindow::LoadChats() {
@@ -466,6 +468,11 @@ void CMainWindow::ProcessUpdate(td::td_api::object_ptr<td::td_api::Object> updat
             }
             auto it = m_chats.find(msg_update->message_->chat_id_);
             if (it != m_chats.end()) {
+                if (!it->second->default_disable_notification_) {
+                    wxString title = wxString::FromUTF8(it->second->title_);
+                    wxString content = FormatMessageContent(&*it->second->last_message_->content_);
+                    g_notificationSender.Send(title, content);
+                }
                 it->second->unread_count_++;
                 it->second->last_message_ = std::move(msg_update->message_);
                 UpdateChatInList(it->first);
