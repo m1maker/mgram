@@ -11,10 +11,10 @@
 class CFolderClientData final : public wxClientData {
   public:
     enum EFolderType {
-ALL_CHATS,
- ARCHIVE,
- FOLDER
- };
+        ALL_CHATS,
+        ARCHIVE,
+        FOLDER
+    };
     explicit CFolderClientData(const EFolderType& type, int32_t folderId = 0) : m_type(type), m_folderId(folderId) {}
     EFolderType GetType() const { return m_type; }
     int32_t GetFolderId() const { return m_folderId; }
@@ -216,27 +216,23 @@ CMainWindow::CMainWindow(wxSimplebook* book)
     m_currentChatList = td::td_api::make_object<td::td_api::chatListMain>();
 }
 
-
-
-
-
 void CMainWindow::LoadChats() {
     if (!m_currentChatList)
         return;
 
     td::td_api::object_ptr<td::td_api::ChatList> chat_list_to_load;
     switch (m_currentChatList->get_id()) {
-    case td::td_api::chatListMain::ID:
-        chat_list_to_load = td::td_api::make_object<td::td_api::chatListMain>();
-        break;
-    case td::td_api::chatListArchive::ID:
-        chat_list_to_load = td::td_api::make_object<td::td_api::chatListArchive>();
-        break;
-    case td::td_api::chatListFolder::ID: {
-        auto* folder_list = static_cast<td::td_api::chatListFolder*>(m_currentChatList.get());
-        chat_list_to_load = td::td_api::make_object<td::td_api::chatListFolder>(folder_list->chat_folder_id_);
-        break;
-    }
+        case td::td_api::chatListMain::ID:
+            chat_list_to_load = td::td_api::make_object<td::td_api::chatListMain>();
+            break;
+        case td::td_api::chatListArchive::ID:
+            chat_list_to_load = td::td_api::make_object<td::td_api::chatListArchive>();
+            break;
+        case td::td_api::chatListFolder::ID: {
+            auto* folder_list = static_cast<td::td_api::chatListFolder*>(m_currentChatList.get());
+            chat_list_to_load = td::td_api::make_object<td::td_api::chatListFolder>(folder_list->chat_folder_id_);
+            break;
+        }
     }
 
     if (chat_list_to_load) {
@@ -244,7 +240,6 @@ void CMainWindow::LoadChats() {
             td::td_api::make_object<td::td_api::loadChats>(std::move(chat_list_to_load), 100), {});
     }
 }
-
 
 void CMainWindow::UpdateChatInList(long long chatId) {
     auto it = m_chats.find(chatId);
@@ -267,7 +262,6 @@ void CMainWindow::UpdateChatInList(long long chatId) {
     }
     FormatAndUpdateChatListEntry(chat, nullptr);
 }
-
 
 void CMainWindow::FormatAndUpdateChatListEntry(const td::td_api::object_ptr<td::td_api::chat>& chat,
                                                const td::td_api::user* user) {
@@ -386,7 +380,6 @@ void CMainWindow::ProcessChatUpdate(td::td_api::object_ptr<td::td_api::chat> cha
     UpdateChatInList(chatId);
 }
 
-
 wxString CMainWindow::FormatMessageForView(const td::td_api::message* message, const wxString& sender_name) {
     if (!message)
         return "";
@@ -412,37 +405,37 @@ wxString CMainWindow::FormatMessageForView(const td::td_api::message* message, c
 
 void CMainWindow::ProcessUpdate(td::td_api::object_ptr<td::td_api::Object> update) {
     switch (update->get_id()) {
-case td::td_api::updateChatFolders::ID: {
-    auto chatFoldersUpdate = td::td_api::move_object_as<td::td_api::updateChatFolders>(update);
+        case td::td_api::updateChatFolders::ID: {
+            auto chatFoldersUpdate = td::td_api::move_object_as<td::td_api::updateChatFolders>(update);
 
-    auto folders_ptr = std::make_shared<std::vector<td::td_api::object_ptr<td::td_api::chatFolderInfo>>>(
-        std::move(chatFoldersUpdate->chat_folders_));
+            auto folders_ptr = std::make_shared<std::vector<td::td_api::object_ptr<td::td_api::chatFolderInfo>>>(
+                std::move(chatFoldersUpdate->chat_folders_));
 
-    CallAfter([this, captured_folders_ptr = folders_ptr]() {
-        m_folderList->Freeze();
-        m_folderList->Clear();
-        m_chatFolders.clear();
+            CallAfter([this, captured_folders_ptr = folders_ptr]() {
+                m_folderList->Freeze();
+                m_folderList->Clear();
+                m_chatFolders.clear();
 
-        m_folderList->Append("All Chats");
-        m_folderList->SetClientObject(0, new CFolderClientData(CFolderClientData::ALL_CHATS));
-        m_folderList->Append("Archive");
-        m_folderList->SetClientObject(1, new CFolderClientData(CFolderClientData::ARCHIVE));
+                m_folderList->Append("All Chats");
+                m_folderList->SetClientObject(0, new CFolderClientData(CFolderClientData::ALL_CHATS));
+                m_folderList->Append("Archive");
+                m_folderList->SetClientObject(1, new CFolderClientData(CFolderClientData::ARCHIVE));
 
-        for (const auto& chatFolderInfo : *captured_folders_ptr) {
-            int pos = m_folderList->GetCount();
-            if (chatFolderInfo && chatFolderInfo->name_) {
-                 m_folderList->Append(wxString::FromUTF8(chatFolderInfo->name_->text_->text_));
-                 m_folderList->SetClientObject(
-                    pos, new CFolderClientData(CFolderClientData::FOLDER, chatFolderInfo->id_));
-            }
+                for (const auto& chatFolderInfo : *captured_folders_ptr) {
+                    int pos = m_folderList->GetCount();
+                    if (chatFolderInfo && chatFolderInfo->name_) {
+                        m_folderList->Append(wxString::FromUTF8(chatFolderInfo->name_->text_->text_));
+                        m_folderList->SetClientObject(
+                            pos, new CFolderClientData(CFolderClientData::FOLDER, chatFolderInfo->id_));
+                    }
+                }
+
+                m_folderList->SetSelection(0);
+                m_folderList->Thaw();
+            });
+            LoadChats();
+            break;
         }
-
-        m_folderList->SetSelection(0);
-        m_folderList->Thaw();
-    });
-    LoadChats();
-    break;
-}
         case td::td_api::updateNewChat::ID: {
             ProcessChatUpdate(std::move(td::td_api::move_object_as<td::td_api::updateNewChat>(update)->chat_));
             break;
