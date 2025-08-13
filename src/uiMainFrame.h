@@ -3,7 +3,9 @@
 
 #include "tdManager.h"
 
+#include <wx/ipc.h>
 #include <wx/simplebook.h>
+#include <wx/snglinst.h>
 #include <wx/wx.h>
 
 class CLoginWindow;
@@ -24,7 +26,10 @@ class CMainFrame final : public wxFrame {
     void InitializeTdlib();
     void OnAuthorizationStateUpdate(td::td_api::object_ptr<td::td_api::Object> update);
 
+    void OnClose(wxCloseEvent& event);
+
     TdManager m_tdManager;
+    DECLARE_EVENT_TABLE()
 };
 
 extern CMainFrame* g_mainFrame;
@@ -32,6 +37,24 @@ extern CMainFrame* g_mainFrame;
 class CMgramEntry final : public wxApp {
   public:
     virtual bool OnInit() override;
+    virtual int OnExit() override;
+
+  private:
+    wxSingleInstanceChecker* m_instanceChecker;
+    wxServer* m_server;
 };
 
+class CMgramConnection final : public wxConnection {
+  public:
+    CMgramConnection() = default;
+    ~CMgramConnection() = default;
+
+    bool OnExec(const wxString& topic, const wxString& data) override;
+};
+
+class CMgramServer final : public wxServer {
+  public:
+    CMgramServer() = default;
+    wxConnectionBase* OnAcceptConnection(const wxString& topic) override;
+};
 #endif

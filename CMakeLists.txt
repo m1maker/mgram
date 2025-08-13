@@ -117,6 +117,7 @@ FetchContent_MakeAvailable(ogg)
 target_link_libraries(${PROJECT_NAME} PRIVATE
   wx::core
   wx::base
+wx::net
   Td::TdStatic
 miniaudio
 Vorbis::vorbisfile
