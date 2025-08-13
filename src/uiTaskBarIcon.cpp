@@ -4,7 +4,7 @@
 
 BEGIN_EVENT_TABLE(CMgramTaskBarIcon, wxTaskBarIcon)
 EVT_TASKBAR_LEFT_DCLICK(CMgramTaskBarIcon::OnLeftDoubleClick)
-EVT_MENU(wxID_ANY, CMgramTaskBarIcon::OnMenuRestore)
+EVT_MENU(wxID_OPEN, CMgramTaskBarIcon::OnMenuRestore)
 EVT_MENU(wxID_EXIT, CMgramTaskBarIcon::OnMenuExit)
 END_EVENT_TABLE()
 
@@ -18,7 +18,7 @@ void CMgramTaskBarIcon::OnLeftDoubleClick(wxTaskBarIconEvent& event) {
 
 wxMenu* CMgramTaskBarIcon::CreatePopupMenu() {
     wxMenu* menu = new wxMenu;
-    menu->Append(wxID_ANY, "Open");
+    menu->Append(wxID_OPEN, "Open");
     menu->AppendSeparator();
     menu->Append(wxID_EXIT, "Exit");
     return menu;
