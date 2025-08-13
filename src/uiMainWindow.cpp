@@ -8,6 +8,22 @@
 #include <wx/listbox.h>
 #include <wx/wx.h>
 
+class CFolderClientData final : public wxClientData {
+  public:
+    enum EFolderType {
+ALL_CHATS,
+ ARCHIVE,
+ FOLDER
+ };
+    explicit CFolderClientData(const EFolderType& type, int32_t folderId = 0) : m_type(type), m_folderId(folderId) {}
+    EFolderType GetType() const { return m_type; }
+    int32_t GetFolderId() const { return m_folderId; }
+
+  private:
+    EFolderType m_type;
+    int32_t m_folderId;
+};
+
 class CChatClientData final : public wxClientData {
   public:
     explicit CChatClientData(long long chatId, long long sortKey) : m_chatId(chatId), m_sortKey(sortKey) {}
@@ -134,6 +150,21 @@ static wxString FormatMessageContent(const td::td_api::MessageContent* content) 
     return type_str + (formatted_content.IsEmpty() ? "" : ", " + formatted_content);
 }
 
+static bool IsPositionInCurrentList(const td::td_api::ChatList* position_list,
+                                    const td::td_api::ChatList* current_list) {
+    if (!position_list || !current_list)
+        return false;
+    if (position_list->get_id() != current_list->get_id())
+        return false;
+
+    if (current_list->get_id() == td::td_api::chatListFolder::ID) {
+        auto* pos_folder = static_cast<const td::td_api::chatListFolder*>(position_list);
+        auto* current_folder = static_cast<const td::td_api::chatListFolder*>(current_list);
+        return pos_folder->chat_folder_id_ == current_folder->chat_folder_id_;
+    }
+    return true;
+}
+
 CMainWindow::CMainWindow(wxSimplebook* book)
     : wxPanel(book, wxID_ANY), m_book(book), m_currentChatId(0), m_lastMessageId(0), m_loadingMore(false) {
     auto* sizer = new wxBoxSizer(wxVERTICAL);
@@ -141,12 +172,19 @@ CMainWindow::CMainWindow(wxSimplebook* book)
 
     auto* leftPanel = new wxPanel(m_splitter);
     auto* leftSizer = new wxBoxSizer(wxVERTICAL);
+
+    auto* folderListLabel = new wxStaticText(leftPanel, wxID_ANY, "&Folders");
+    m_folderList = new wxListBox(leftPanel, wxID_ANY);
+    leftSizer->Add(folderListLabel, 0, wxALL, 5);
+    leftSizer->Add(m_folderList, 0, wxEXPAND | wxALL, 5);
+
     auto* chatListLabel = new wxStaticText(leftPanel, wxID_ANY, "&Chats");
     m_chatList = new wxListBox(leftPanel, wxID_ANY, wxDefaultPosition, wxDefaultSize, 0, nullptr);
     leftSizer->Add(chatListLabel, 0, wxALL, 5);
     leftSizer->Add(m_chatList, 1, wxEXPAND | wxALL, 5);
     leftPanel->SetSizer(leftSizer);
 
+    m_folderList->Bind(wxEVT_LISTBOX, &CMainWindow::OnFolderSelected, this);
     m_chatList->Bind(wxEVT_LISTBOX, &CMainWindow::OnChatSelected, this);
 
     auto* rightPanel = new wxPanel(m_splitter);
@@ -175,22 +213,38 @@ CMainWindow::CMainWindow(wxSimplebook* book)
     m_sendButton->Bind(wxEVT_BUTTON, &CMainWindow::OnSendPressed, this);
     m_messageInput->Bind(wxEVT_TEXT_ENTER, &CMainWindow::OnSendPressed, this);
 
-    LoadChats();
+    m_currentChatList = td::td_api::make_object<td::td_api::chatListMain>();
 }
+
+
+
+
 
 void CMainWindow::LoadChats() {
-    g_mainFrame->getTdManager()->send(
-        td::td_api::make_object<td::td_api::loadChats>(td::td_api::make_object<td::td_api::chatListMain>(), 100), {});
+    if (!m_currentChatList)
+        return;
+
+    td::td_api::object_ptr<td::td_api::ChatList> chat_list_to_load;
+    switch (m_currentChatList->get_id()) {
+    case td::td_api::chatListMain::ID:
+        chat_list_to_load = td::td_api::make_object<td::td_api::chatListMain>();
+        break;
+    case td::td_api::chatListArchive::ID:
+        chat_list_to_load = td::td_api::make_object<td::td_api::chatListArchive>();
+        break;
+    case td::td_api::chatListFolder::ID: {
+        auto* folder_list = static_cast<td::td_api::chatListFolder*>(m_currentChatList.get());
+        chat_list_to_load = td::td_api::make_object<td::td_api::chatListFolder>(folder_list->chat_folder_id_);
+        break;
+    }
+    }
+
+    if (chat_list_to_load) {
+        g_mainFrame->getTdManager()->send(
+            td::td_api::make_object<td::td_api::loadChats>(std::move(chat_list_to_load), 100), {});
+    }
 }
 
-void CMainWindow::ProcessChatUpdate(td::td_api::object_ptr<td::td_api::chat> chat) {
-    if (!chat) {
-        return;
-    }
-    long long chatId = chat->id_;
-    m_chats[chatId] = std::move(chat);
-    UpdateChatInList(chatId);
-}
 
 void CMainWindow::UpdateChatInList(long long chatId) {
     auto it = m_chats.find(chatId);
@@ -213,6 +267,7 @@ void CMainWindow::UpdateChatInList(long long chatId) {
     }
     FormatAndUpdateChatListEntry(chat, nullptr);
 }
+
 
 void CMainWindow::FormatAndUpdateChatListEntry(const td::td_api::object_ptr<td::td_api::chat>& chat,
                                                const td::td_api::user* user) {
@@ -282,16 +337,23 @@ void CMainWindow::FormatAndUpdateChatListEntry(const td::td_api::object_ptr<td::
     }
 
     bool is_pinned = false;
+    long long order = 0x7FFFFFFFFFFFFFFF;
+    bool in_current_list = false;
+
     if (!chat->positions_.empty()) {
         for (const auto& pos : chat->positions_) {
-            if (pos != nullptr && pos->list_->get_id() == td::td_api::chatListMain::ID) {
-                m_lastChatOrder = pos->order_;
+            if (pos && IsPositionInCurrentList(pos->list_.get(), m_currentChatList.get())) {
+                order = pos->order_;
                 is_pinned = pos->is_pinned_;
+                in_current_list = true;
                 break;
             }
         }
     }
-    long long sortKey = (static_cast<long long>(is_pinned) << 62) | m_lastChatOrder;
+    if (!in_current_list)
+        return;
+
+    long long sortKey = (static_cast<long long>(is_pinned) << 62) | order;
 
     CallAfter([this, chatId, display_str, sortKey]() {
         m_chatList->Freeze();
@@ -314,6 +376,16 @@ void CMainWindow::FormatAndUpdateChatListEntry(const td::td_api::object_ptr<td::
         m_chatList->Thaw();
     });
 }
+
+void CMainWindow::ProcessChatUpdate(td::td_api::object_ptr<td::td_api::chat> chat) {
+    if (!chat) {
+        return;
+    }
+    long long chatId = chat->id_;
+    m_chats[chatId] = std::move(chat);
+    UpdateChatInList(chatId);
+}
+
 
 wxString CMainWindow::FormatMessageForView(const td::td_api::message* message, const wxString& sender_name) {
     if (!message)
@@ -340,6 +412,37 @@ wxString CMainWindow::FormatMessageForView(const td::td_api::message* message, c
 
 void CMainWindow::ProcessUpdate(td::td_api::object_ptr<td::td_api::Object> update) {
     switch (update->get_id()) {
+case td::td_api::updateChatFolders::ID: {
+    auto chatFoldersUpdate = td::td_api::move_object_as<td::td_api::updateChatFolders>(update);
+
+    auto folders_ptr = std::make_shared<std::vector<td::td_api::object_ptr<td::td_api::chatFolderInfo>>>(
+        std::move(chatFoldersUpdate->chat_folders_));
+
+    CallAfter([this, captured_folders_ptr = folders_ptr]() {
+        m_folderList->Freeze();
+        m_folderList->Clear();
+        m_chatFolders.clear();
+
+        m_folderList->Append("All Chats");
+        m_folderList->SetClientObject(0, new CFolderClientData(CFolderClientData::ALL_CHATS));
+        m_folderList->Append("Archive");
+        m_folderList->SetClientObject(1, new CFolderClientData(CFolderClientData::ARCHIVE));
+
+        for (const auto& chatFolderInfo : *captured_folders_ptr) {
+            int pos = m_folderList->GetCount();
+            if (chatFolderInfo && chatFolderInfo->name_) {
+                 m_folderList->Append(wxString::FromUTF8(chatFolderInfo->name_->text_->text_));
+                 m_folderList->SetClientObject(
+                    pos, new CFolderClientData(CFolderClientData::FOLDER, chatFolderInfo->id_));
+            }
+        }
+
+        m_folderList->SetSelection(0);
+        m_folderList->Thaw();
+    });
+    LoadChats();
+    break;
+}
         case td::td_api::updateNewChat::ID: {
             ProcessChatUpdate(std::move(td::td_api::move_object_as<td::td_api::updateNewChat>(update)->chat_));
             break;
@@ -425,6 +528,38 @@ void CMainWindow::ProcessUpdate(td::td_api::object_ptr<td::td_api::Object> updat
         default:
             break;
     }
+}
+
+void CMainWindow::OnFolderSelected(wxCommandEvent& event) {
+    int selectedIndex = m_folderList->GetSelection();
+    if (selectedIndex == wxNOT_FOUND)
+        return;
+    auto* clientData = static_cast<CFolderClientData*>(m_folderList->GetClientObject(selectedIndex));
+    if (!clientData)
+        return;
+
+    switch (clientData->GetType()) {
+        case CFolderClientData::ALL_CHATS:
+            m_currentChatList = td::td_api::make_object<td::td_api::chatListMain>();
+            break;
+        case CFolderClientData::ARCHIVE:
+            m_currentChatList = td::td_api::make_object<td::td_api::chatListArchive>();
+            break;
+        case CFolderClientData::FOLDER:
+            m_currentChatList = td::td_api::make_object<td::td_api::chatListFolder>(clientData->GetFolderId());
+            break;
+    }
+
+    m_chatList->Clear();
+    m_messageView->Clear();
+    m_currentChatId = 0;
+    m_lastMessageId = 0;
+
+    for (const auto& chat_pair : m_chats) {
+        UpdateChatInList(chat_pair.first);
+    }
+
+    LoadChats();
 }
 
 void CMainWindow::OnChatSelected(wxCommandEvent& event) {

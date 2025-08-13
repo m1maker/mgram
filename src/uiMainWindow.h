@@ -32,6 +32,7 @@ class CMainWindow final : public wxPanel {
 
     void OnChatSelected(wxCommandEvent& event);
     void OnSendPressed(wxCommandEvent& event);
+    void OnFolderSelected(wxCommandEvent& event);
     void LoadChats();
     void GetUser(long long userId, std::function<void(const td::td_api::user*)> callback);
     void LoadMessages(long long chatId);
@@ -41,6 +42,7 @@ class CMainWindow final : public wxPanel {
     void OnMessageSelected(wxCommandEvent& event);
 
     wxSimplebook* m_book;
+    wxListBox* m_folderList;
     wxListBox* m_chatList;
     wxListBox* m_messageView;
     wxStaticText* m_messageInputLabel; // We store it as member, because it can be broadcast or payed message.
@@ -56,6 +58,10 @@ class CMainWindow final : public wxPanel {
     EChatWindowState m_ChatState{MESSAGING};
     bool m_allChatsLoaded{false};
     bool m_loadingMore{false};
+
+    td::td_api::object_ptr<td::td_api::ChatList> m_currentChatList;
+    std::map<int32_t, td::td_api::object_ptr<td::td_api::chatFolderInfo>> m_chatFolders;
+
     std::map<long long, td::td_api::object_ptr<td::td_api::chat>> m_chats;
     std::map<long long, td::td_api::object_ptr<td::td_api::user>> m_users;
     std::map<long long, td::td_api::object_ptr<td::td_api::basicGroup>> m_basicGroups;
