@@ -470,7 +470,10 @@ void CMainWindow::ProcessUpdate(td::td_api::object_ptr<td::td_api::Object> updat
             if (it != m_chats.end()) {
                 if (!it->second->default_disable_notification_) {
                     wxString title = wxString::FromUTF8(it->second->title_);
-                    wxString content = FormatMessageContent(&*it->second->last_message_->content_);
+                    wxString content = "No content";
+                    if (it->second->last_message_ && it->second->last_message_->content_) {
+                        content = FormatMessageContent(&*it->second->last_message_->content_);
+                    }
                     g_notificationSender.Send(title, content);
                 }
                 it->second->unread_count_++;
@@ -572,7 +575,11 @@ void CMainWindow::OnChatSelected(wxCommandEvent& event) {
 
     long long chatId = clientData->GetChatId();
     if (chatId != 0 && chatId != m_currentChatId) {
+        if (m_currentChatId != 0) {
+            g_mainFrame->getTdManager()->send(td::td_api::make_object<td::td_api::closeChat>(m_currentChatId));
+        }
         m_currentChatId = chatId;
+        g_mainFrame->getTdManager()->send(td::td_api::make_object<td::td_api::openChat>(m_currentChatId));
         m_messageView->Clear();
         m_lastMessageId = 0;
         LoadMessages(m_currentChatId);
