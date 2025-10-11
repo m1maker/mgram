@@ -36,7 +36,7 @@ class CChatClientData final : public wxClientData {
     long long m_sortKey;
 };
 
-static wxString FormatTimestamp(int32_t unix_time) {
+static wxString FormatTimestamp(int64_t unix_time) {
     if (unix_time == 0) {
         return "N/A";
     }
