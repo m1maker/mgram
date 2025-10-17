@@ -528,6 +528,21 @@ void CMainWindow::ProcessUpdate(td::td_api::object_ptr<td::td_api::Object> updat
             m_users[user_update->user_->id_] = std::move(user_update->user_);
             break;
         }
+        case td::td_api::updateBasicGroup::ID: {
+            auto basic_group_update = td::td_api::move_object_as<td::td_api::updateBasicGroup>(update);
+            m_basicGroups[basic_group_update->basic_group_->id_] = std::move(basic_group_update->basic_group_);
+            break;
+        }
+        case td::td_api::updateSupergroup::ID: {
+            auto supergroup_update = td::td_api::move_object_as<td::td_api::updateSupergroup>(update);
+            m_supergroups[supergroup_update->supergroup_->id_] = std::move(supergroup_update->supergroup_);
+            break;
+        }
+        case td::td_api::updateSecretChat::ID: {
+            auto secret_chat_update = td::td_api::move_object_as<td::td_api::updateSecretChat>(update);
+            m_secretChats[secret_chat_update->secret_chat_->id_] = std::move(secret_chat_update->secret_chat_);
+            break;
+        }
         default:
             break;
     }
