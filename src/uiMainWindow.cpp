@@ -1,5 +1,6 @@
 #include "uiMainWindow.h"
 
+#include "clientData.h"
 #include "notificationSender.h"
 #include "uiMainFrame.h"
 
@@ -8,33 +9,6 @@
 #include <wx/datetime.h>
 #include <wx/listbox.h>
 #include <wx/wx.h>
-
-class CFolderClientData final : public wxClientData {
-  public:
-    enum EFolderType {
-        ALL_CHATS,
-        ARCHIVE,
-        FOLDER
-    };
-    explicit CFolderClientData(const EFolderType& type, int32_t folderId = 0) : m_type(type), m_folderId(folderId) {}
-    EFolderType GetType() const { return m_type; }
-    int32_t GetFolderId() const { return m_folderId; }
-
-  private:
-    EFolderType m_type;
-    int32_t m_folderId;
-};
-
-class CChatClientData final : public wxClientData {
-  public:
-    explicit CChatClientData(long long chatId, long long sortKey) : m_chatId(chatId), m_sortKey(sortKey) {}
-    long long GetChatId() const { return m_chatId; }
-    long long GetSortKey() const { return m_sortKey; }
-
-  private:
-    long long m_chatId;
-    long long m_sortKey;
-};
 
 static wxString FormatTimestamp(int64_t unix_time) {
     if (unix_time == 0) {
@@ -603,6 +577,7 @@ void CMainWindow::OnChatSelected(wxCommandEvent& event) {
 
 void CMainWindow::OnMessageSelected(wxCommandEvent& event) {
     LoadMessages(m_currentChatId);
+    OnMessageViewed();
     event.Skip();
 }
 
@@ -625,16 +600,22 @@ void CMainWindow::GetUser(long long userId, std::function<void(const td::td_api:
 }
 
 void CMainWindow::LoadMessages(long long chatId) {
-    if (m_loadingMore)
+    if (m_loadingMore || chatId == 0)
         return;
     m_loadingMore = true;
 
+    if (chatId != m_currentChatId) {
+        m_messageView->Clear();
+        m_currentChatId = chatId;
+        m_lastMessageId = 0;
+    }
+
     auto getHistory = td::td_api::make_object<td::td_api::getChatHistory>(chatId, m_lastMessageId, 0, 50, false);
     g_mainFrame->getTdManager()->send(std::move(getHistory), [this, chatId](TdManager::Object object) {
+        m_loadingMore = false;
         if (object->get_id() == td::td_api::messages::ID) {
             auto messages = td::td_api::move_object_as<td::td_api::messages>(object);
             if (messages->messages_.empty()) {
-                m_loadingMore = false;
                 return;
             }
             m_lastMessageId = messages->messages_.back()->id_;
@@ -642,18 +623,16 @@ void CMainWindow::LoadMessages(long long chatId) {
             auto message_queue = std::make_shared<std::vector<td::td_api::object_ptr<td::td_api::message>>>(
                 std::move(messages->messages_));
             auto history_strs = std::make_shared<std::vector<wxString>>(message_queue->size());
+            auto message_data = std::make_shared<std::vector<std::pair<long long, long long>>>(message_queue->size());
             auto completed_count = std::make_shared<std::atomic<size_t>>(0);
             size_t total_messages = message_queue->size();
-
-            if (total_messages == 0) {
-                m_loadingMore = false;
-                return;
-            }
 
             size_t i = 0;
             for (auto it = message_queue->rbegin(); it != message_queue->rend(); ++it, ++i) {
                 const auto& message = *it;
                 const size_t history_idx = i;
+
+                (*message_data)[history_idx] = std::make_pair(message->id_, message->chat_id_);
 
                 long long sender_user_id = 0;
                 wxString sender_name = "Unknown";
@@ -670,11 +649,15 @@ void CMainWindow::LoadMessages(long long chatId) {
                     }
                     (*history_strs)[history_idx] = FormatMessageForView(message.get(), sender_name);
                     if (++(*completed_count) == total_messages) {
-                        CallAfter([this, history_strs]() {
+                        CallAfter([this, history_strs, message_data]() {
                             m_messageView->Freeze();
-                            for (auto str_it = history_strs->rbegin(); str_it != history_strs->rend(); ++str_it) {
-                                if (!str_it->IsEmpty())
-                                    m_messageView->Insert(*str_it, 0);
+                            for (size_t idx = 0; idx < history_strs->size(); ++idx) {
+                                if (!(*history_strs)[idx].IsEmpty()) {
+                                    m_messageView->Insert((*history_strs)[idx], idx);
+                                    m_messageView->SetClientObject(idx,
+                                                                   new CMessageClientData((*message_data)[idx].first,
+                                                                                          (*message_data)[idx].second));
+                                }
                             }
                             m_messageView->Thaw();
                         });
@@ -683,25 +666,34 @@ void CMainWindow::LoadMessages(long long chatId) {
                 }
 
                 GetUser(sender_user_id, [this, history_idx, message_queue, message_ptr = message.get(), history_strs,
-                                         completed_count, total_messages](const td::td_api::user* user) {
+                                         message_data, completed_count, total_messages](const td::td_api::user* user) {
                     wxString name =
                         (user) ? wxString::FromUTF8(user->first_name_ + " " + user->last_name_) : "Unknown User";
                     (*history_strs)[history_idx] = FormatMessageForView(message_ptr, name);
 
                     if (++(*completed_count) == total_messages) {
-                        CallAfter([this, history_strs]() {
+                        CallAfter([this, history_strs, message_data]() {
                             m_messageView->Freeze();
-                            for (auto str_it = history_strs->rbegin(); str_it != history_strs->rend(); ++str_it) {
-                                if (!str_it->IsEmpty())
-                                    m_messageView->Insert(*str_it, 0);
+                            for (size_t idx = 0; idx < history_strs->size(); ++idx) {
+                                if (!(*history_strs)[idx].IsEmpty()) {
+                                    m_messageView->Insert((*history_strs)[idx], idx);
+                                    m_messageView->SetClientObject(idx,
+                                                                   new CMessageClientData((*message_data)[idx].first,
+                                                                                          (*message_data)[idx].second));
+                                }
                             }
                             m_messageView->Thaw();
                         });
                     }
                 });
             }
+
+            std::vector<long long> messageIds;
+            for (const auto& msg : *message_queue) {
+                messageIds.push_back(msg->id_);
+            }
+            MarkMessagesAsRead(chatId, messageIds);
         }
-        m_loadingMore = false;
     });
 }
 
@@ -720,9 +712,11 @@ void CMainWindow::AppendMessage(const td::td_api::object_ptr<td::td_api::message
             }
         }
         wxString formatted_msg = FormatMessageForView(message.get(), sender_name);
-        CallAfter([this, formatted_msg]() {
+        CallAfter([this, formatted_msg, msg = message.get()]() {
             m_messageView->Append(formatted_msg);
-            m_messageView->SetSelection(m_messageView->GetCount() - 1);
+            int newIndex = m_messageView->GetCount() - 1;
+            m_messageView->SetClientObject(newIndex, new CMessageClientData(msg->id_, msg->chat_id_));
+            m_messageView->SetSelection(newIndex);
         });
         return;
     }
@@ -731,12 +725,44 @@ void CMainWindow::AppendMessage(const td::td_api::object_ptr<td::td_api::message
         if (user) {
             wxString name = wxString::FromUTF8(user->first_name_ + " " + user->last_name_);
             wxString formatted_msg = FormatMessageForView(msg, name);
-            CallAfter([this, formatted_msg]() {
+            CallAfter([this, formatted_msg, msg]() {
                 m_messageView->Append(formatted_msg);
-                m_messageView->SetSelection(m_messageView->GetCount() - 1);
+                int newIndex = m_messageView->GetCount() - 1;
+                m_messageView->SetClientObject(newIndex, new CMessageClientData(msg->id_, msg->chat_id_));
+                m_messageView->SetSelection(newIndex);
             });
         }
     });
+}
+
+void CMainWindow::MarkMessagesAsRead(long long chatId, const std::vector<long long>& messageIds, bool forceRead) {
+    auto viewMessages = td::td_api::make_object<td::td_api::viewMessages>();
+    viewMessages->chat_id_ = chatId;
+    for (const long long& message : messageIds) {
+        viewMessages->message_ids_.push_back(message);
+    }
+    viewMessages->force_read_ = true;
+    g_mainFrame->getTdManager()->send(std::move(viewMessages));
+}
+
+void CMainWindow::OnMessageViewed() {
+    if (m_currentChatId == 0)
+        return;
+
+    int visibleStart = m_messageView->GetTopItem();
+    int visibleEnd = visibleStart + m_messageView->GetCountPerPage();
+
+    std::vector<long long> visibleMessageIds;
+    for (int i = visibleStart; i <= visibleEnd && i < m_messageView->GetCount(); ++i) {
+        auto* clientData = static_cast<CMessageClientData*>(m_messageView->GetClientObject(i));
+        if (clientData) {
+            visibleMessageIds.push_back(clientData->GetMessageId());
+        }
+    }
+
+    if (!visibleMessageIds.empty()) {
+        MarkMessagesAsRead(m_currentChatId, visibleMessageIds);
+    }
 }
 
 void CMainWindow::OnSendPressed(wxCommandEvent& event) {

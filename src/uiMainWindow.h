@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <map>
+#include <vector>
 #include <wx/simplebook.h>
 #include <wx/splitter.h>
 #include <wx/wx.h>
@@ -37,7 +38,8 @@ class CMainWindow final : public wxPanel {
     void GetUser(long long userId, std::function<void(const td::td_api::user*)> callback);
     void LoadMessages(long long chatId);
     void AppendMessage(const td::td_api::object_ptr<td::td_api::message>& message);
-
+    void MarkMessagesAsRead(long long chatId, const std::vector<long long>& messageIds, bool forceRead = false);
+    void OnMessageViewed();
     void UpdateChatInList(long long chatId);
     void OnMessageSelected(wxCommandEvent& event);
 
